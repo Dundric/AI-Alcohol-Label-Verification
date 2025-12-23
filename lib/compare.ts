@@ -1,4 +1,9 @@
-import { AlcoholLabel, VerificationResult } from "./schemas";
+import {
+  ExtractedAlcoholLabel,
+  ExpectedAlcoholLabel,
+  LabelField,
+  VerificationResult,
+} from "./schemas";
 
 /**
  * Normalize text for comparison by converting to lowercase and removing punctuation
@@ -55,9 +60,13 @@ function similarityRatio(str1: string, str2: string): number {
  * Fuzzy match brand names with normalization
  * Returns ✅ if similarity > 0.85, ⚠️ if > 0.6, otherwise ❌
  */
-function compareBrand(extracted: string, expected: string): VerificationResult {
-  const normalizedExtracted = normalizeText(extracted);
-  const normalizedExpected = normalizeText(expected);
+function compareBrand(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
   const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
 
   let status: "✅" | "⚠️" | "❌";
@@ -76,8 +85,8 @@ function compareBrand(extracted: string, expected: string): VerificationResult {
 
   return {
     field: "Brand",
-    extracted,
-    expected,
+    extracted: extractedText,
+    expected: expected.text,
     status,
     message,
   };
@@ -86,9 +95,13 @@ function compareBrand(extracted: string, expected: string): VerificationResult {
 /**
  * Compare class/type with fuzzy matching
  */
-function compareClassType(extracted: string, expected: string): VerificationResult {
-  const normalizedExtracted = normalizeText(extracted);
-  const normalizedExpected = normalizeText(expected);
+function compareClassType(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
   const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
 
   let status: "✅" | "⚠️" | "❌";
@@ -107,20 +120,24 @@ function compareClassType(extracted: string, expected: string): VerificationResu
 
   return {
     field: "Class/Type",
-    extracted,
-    expected,
+    extracted: extractedText,
+    expected: expected.text,
     status,
     message,
   };
 }
 
 /**
- * Compare ABV (Alcohol by Volume)
+ * Compare alcohol content
  * Extracts numeric values and compares with tolerance
  */
-function compareABV(extracted: string, expected: string): VerificationResult {
-  const extractedNum = parseFloat(extracted.replace(/[^\d.]/g, ""));
-  const expectedNum = parseFloat(expected.replace(/[^\d.]/g, ""));
+function compareAlcoholContent(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const extractedNum = parseFloat(extractedText.replace(/[^\d.]/g, ""));
+  const expectedNum = parseFloat(expected.text.replace(/[^\d.]/g, ""));
 
   let status: "✅" | "⚠️" | "❌";
   let message: string;
@@ -137,9 +154,9 @@ function compareABV(extracted: string, expected: string): VerificationResult {
   }
 
   return {
-    field: "ABV",
-    extracted,
-    expected,
+    field: "Alcohol Content",
+    extracted: extractedText,
+    expected: expected.text,
     status,
     message,
   };
@@ -149,12 +166,16 @@ function compareABV(extracted: string, expected: string): VerificationResult {
  * Compare net contents
  * Normalizes units and compares values
  */
-function compareNetContents(extracted: string, expected: string): VerificationResult {
-  const extractedNum = parseFloat(extracted.replace(/[^\d.]/g, ""));
-  const expectedNum = parseFloat(expected.replace(/[^\d.]/g, ""));
+function compareNetContents(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const extractedNum = parseFloat(extractedText.replace(/[^\d.]/g, ""));
+  const expectedNum = parseFloat(expected.text.replace(/[^\d.]/g, ""));
   
-  const extractedUnit = extracted.replace(/[\d.\s]/g, "").toLowerCase();
-  const expectedUnit = expected.replace(/[\d.\s]/g, "").toLowerCase();
+  const extractedUnit = extractedText.replace(/[\d.\s]/g, "").toLowerCase();
+  const expectedUnit = expected.text.replace(/[\d.\s]/g, "").toLowerCase();
 
   let status: "✅" | "⚠️" | "❌";
   let message: string;
@@ -176,8 +197,8 @@ function compareNetContents(extracted: string, expected: string): VerificationRe
 
   return {
     field: "Net Contents",
-    extracted,
-    expected,
+    extracted: extractedText,
+    expected: expected.text,
     status,
     message,
   };
@@ -186,9 +207,13 @@ function compareNetContents(extracted: string, expected: string): VerificationRe
 /**
  * Compare government warning - exact match required
  */
-function compareGovWarning(extracted: string, expected: string): VerificationResult {
-  const normalizedExtracted = normalizeText(extracted);
-  const normalizedExpected = normalizeText(expected);
+function compareGovernmentWarning(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
 
   let status: "✅" | "⚠️" | "❌";
   let message: string;
@@ -209,8 +234,74 @@ function compareGovWarning(extracted: string, expected: string): VerificationRes
 
   return {
     field: "Government Warning",
-    extracted,
-    expected,
+    extracted: extractedText,
+    expected: expected.text,
+    status,
+    message,
+  };
+}
+
+function compareBottlerProducer(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
+  const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
+
+  let status: "✅" | "⚠️" | "❌";
+  let message: string;
+
+  if (similarity > 0.85) {
+    status = "✅";
+    message = "Bottler/Producer matches";
+  } else if (similarity > 0.6) {
+    status = "⚠️";
+    message = `Partial match (${Math.round(similarity * 100)}% similar)`;
+  } else {
+    status = "❌";
+    message = "Bottler/Producer does not match";
+  }
+
+  return {
+    field: "Bottler/Producer",
+    extracted: extractedText,
+    expected: expected.text,
+    status,
+    message,
+  };
+}
+
+function compareCountryOfOrigin(
+  extracted: LabelField | null,
+  expected: LabelField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
+
+  let status: "✅" | "⚠️" | "❌";
+  let message: string;
+
+  if (normalizedExtracted === normalizedExpected) {
+    status = "✅";
+    message = "Country of origin matches";
+  } else {
+    const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
+    if (similarity > 0.9) {
+      status = "⚠️";
+      message = "Country of origin nearly matches";
+    } else {
+      status = "❌";
+      message = "Country of origin does not match";
+    }
+  }
+
+  return {
+    field: "Country of Origin",
+    extracted: extractedText,
+    expected: expected.text,
     status,
     message,
   };
@@ -220,16 +311,30 @@ function compareGovWarning(extracted: string, expected: string): VerificationRes
  * Compare all fields of alcohol labels
  */
 export function compareLabels(
-  extracted: AlcoholLabel,
-  expected: AlcoholLabel
+  extracted: ExtractedAlcoholLabel,
+  expected: ExpectedAlcoholLabel
 ): VerificationResult[] {
-  return [
-    compareBrand(extracted.brand, expected.brand),
+  const results = [
+    compareBrand(extracted.brandName, expected.brandName),
     compareClassType(extracted.classType, expected.classType),
-    compareABV(extracted.abv, expected.abv),
+    compareAlcoholContent(extracted.alcoholContent, expected.alcoholContent),
     compareNetContents(extracted.netContents, expected.netContents),
-    compareGovWarning(extracted.govWarning, expected.govWarning),
+    compareGovernmentWarning(extracted.governmentWarning, expected.governmentWarning),
   ];
+
+  if (expected.bottlerProducer) {
+    results.push(
+      compareBottlerProducer(extracted.bottlerProducer, expected.bottlerProducer)
+    );
+  }
+
+  if (expected.countryOfOrigin) {
+    results.push(
+      compareCountryOfOrigin(extracted.countryOfOrigin, expected.countryOfOrigin)
+    );
+  }
+
+  return results;
 }
 
 /**

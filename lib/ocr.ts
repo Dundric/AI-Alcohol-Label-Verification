@@ -1,76 +1,130 @@
-import { AlcoholLabel } from "./schemas";
+import {
+  extractedAlcoholLabelSchema,
+  ExtractedAlcoholLabel,
+  LabelField,
+} from "./schemas";
+
+function inferAllCaps(text: string): boolean {
+  const trimmed = text.trim();
+  return trimmed.length > 0 && trimmed === trimmed.toUpperCase();
+}
+
+function makeLabelField(
+  text: string,
+  options: Partial<Pick<LabelField, "isBold" | "isAllCaps">> = {}
+): LabelField {
+  return {
+    text,
+    isBold: options.isBold ?? false,
+    isAllCaps: options.isAllCaps ?? inferAllCaps(text),
+  };
+}
 
 // Simulated OCR data for different alcohol types
-const mockOCRData: Record<string, AlcoholLabel> = {
+const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
   whiskey: {
-    brand: "Jack Daniel's",
-    classType: "Tennessee Whiskey",
-    abv: "40%",
-    netContents: "750ml",
-    govWarning:
+    brandName: makeLabelField("Jack Daniel's", { isBold: true }),
+    classType: makeLabelField("Tennessee Whiskey"),
+    alcoholContent: makeLabelField("40%"),
+    netContents: makeLabelField("750ml"),
+    governmentWarning: makeLabelField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+      { isAllCaps: true }
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   },
   wine: {
-    brand: "Chateau Margaux",
-    classType: "Red Wine",
-    abv: "13.5%",
-    netContents: "750ml",
-    govWarning:
+    brandName: makeLabelField("Chateau Margaux", { isBold: true }),
+    classType: makeLabelField("Red Wine"),
+    alcoholContent: makeLabelField("13.5%"),
+    netContents: makeLabelField("750ml"),
+    governmentWarning: makeLabelField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+      { isAllCaps: true }
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   },
   beer: {
-    brand: "Budweiser",
-    classType: "Lager Beer",
-    abv: "5%",
-    netContents: "355ml",
-    govWarning:
+    brandName: makeLabelField("Budweiser", { isBold: true }),
+    classType: makeLabelField("Lager Beer"),
+    alcoholContent: makeLabelField("5%"),
+    netContents: makeLabelField("355ml"),
+    governmentWarning: makeLabelField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+      { isAllCaps: true }
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   },
   vodka: {
-    brand: "Grey Goose",
-    classType: "Vodka",
-    abv: "40%",
-    netContents: "1l",
-    govWarning:
+    brandName: makeLabelField("Grey Goose", { isBold: true }),
+    classType: makeLabelField("Vodka"),
+    alcoholContent: makeLabelField("40%"),
+    netContents: makeLabelField("1l"),
+    governmentWarning: makeLabelField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+      { isAllCaps: true }
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   },
   rum: {
-    brand: "Captain Morgan",
-    classType: "Spiced Rum",
-    abv: "35%",
-    netContents: "700ml",
-    govWarning:
+    brandName: makeLabelField("Captain Morgan", { isBold: true }),
+    classType: makeLabelField("Spiced Rum"),
+    alcoholContent: makeLabelField("35%"),
+    netContents: makeLabelField("700ml"),
+    governmentWarning: makeLabelField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+      { isAllCaps: true }
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   },
 };
 
-/**
- * Mocked OCR function that extracts alcohol label data from an image
- * Returns data quickly to simulate fast OCR processing
- * 
- * @param imageFile - The image file to process (not actually used in mock)
- * @param imageName - The name of the image file
- * @returns Promise<AlcoholLabel> - Extracted label data
- */
-export async function extractLabelData(
-  imageFile: File | null,
-  imageName: string
-): Promise<AlcoholLabel> {
-  // Simulate processing delay (100-300ms)
-  await new Promise((resolve) => setTimeout(resolve, Math.random() * 200 + 100));
+async function requestStructuredLabelData(
+  imageFile: File
+): Promise<ExtractedAlcoholLabel> {
+  const formData = new FormData();
+  formData.append("image", imageFile);
 
-  // Determine which mock data to return based on filename
+  const response = await fetch("/api/extract-label", {
+    method: "POST",
+    body: formData,
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to extract label data");
+  }
+
+  const data = await response.json();
+  const parsed = extractedAlcoholLabelSchema.safeParse(data?.label ?? data);
+
+  if (!parsed.success) {
+    throw new Error("Invalid label response");
+  }
+
+  return parsed.data;
+}
+
+function getMockLabelData(imageName: string): ExtractedAlcoholLabel {
   const lowerName = imageName.toLowerCase();
   
   if (lowerName.includes("whiskey") || lowerName.includes("whisky")) {
     return mockOCRData.whiskey;
-  } else if (lowerName.includes("wine")) {
+  }
+  if (lowerName.includes("wine")) {
     return mockOCRData.wine;
-  } else if (lowerName.includes("beer")) {
+  }
+  if (lowerName.includes("beer")) {
     return mockOCRData.beer;
-  } else if (lowerName.includes("vodka")) {
+  }
+  if (lowerName.includes("vodka")) {
     return mockOCRData.vodka;
-  } else if (lowerName.includes("rum")) {
+  }
+  if (lowerName.includes("rum")) {
     return mockOCRData.rum;
   }
 
@@ -79,14 +133,37 @@ export async function extractLabelData(
 }
 
 /**
+ * Extract alcohol label data from an image using the API, with mock fallback.
+ * 
+ * @param imageFile - The image file to process
+ * @param imageName - The name of the image file
+ * @returns Promise<ExtractedAlcoholLabel> - Extracted label data
+ */
+export async function extractLabelData(
+  imageFile: File | null,
+  imageName: string
+): Promise<ExtractedAlcoholLabel> {
+  if (!imageFile) {
+    return getMockLabelData(imageName);
+  }
+
+  try {
+    return await requestStructuredLabelData(imageFile);
+  } catch (error) {
+    console.error("Falling back to mock OCR data:", error);
+    return getMockLabelData(imageName);
+  }
+}
+
+/**
  * Batch process multiple images
  * 
  * @param files - Array of image files to process
- * @returns Promise<Array<{name: string, data: AlcoholLabel}>> - Array of extracted data
+ * @returns Promise<Array<{name: string, data: ExtractedAlcoholLabel}>> - Array of extracted data
  */
 export async function batchExtractLabelData(
   files: File[]
-): Promise<Array<{ name: string; data: AlcoholLabel }>> {
+): Promise<Array<{ name: string; data: ExtractedAlcoholLabel }>> {
   const results = await Promise.all(
     files.map(async (file) => ({
       name: file.name,

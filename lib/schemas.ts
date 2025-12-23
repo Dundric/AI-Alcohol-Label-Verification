@@ -1,15 +1,38 @@
 import { z } from "zod";
 
-// Schema for alcohol label data
-export const alcoholLabelSchema = z.object({
-  brand: z.string().min(1, "Brand is required"),
-  classType: z.string().min(1, "Class/Type is required"),
-  abv: z.string().regex(/^\d+(\.\d+)?%?$/, "ABV must be a valid percentage"),
-  netContents: z.string().regex(/^\d+(\.\d+)?\s*(ml|l|oz|gal)$/i, "Net contents must include a valid volume unit"),
-  govWarning: z.string().min(1, "Government warning is required"),
+export const labelFieldSchema = z.object({
+  text: z.string().min(1, "Field text is required"),
+  isBold: z.boolean(),
+  isAllCaps: z.boolean(),
 });
 
-export type AlcoholLabel = z.infer<typeof alcoholLabelSchema>;
+const nullableLabelFieldSchema = labelFieldSchema.nullable();
+
+// Schema for extracted alcohol label data (nullable for missing fields)
+export const extractedAlcoholLabelSchema = z.object({
+  brandName: nullableLabelFieldSchema,
+  classType: nullableLabelFieldSchema,
+  alcoholContent: nullableLabelFieldSchema,
+  netContents: nullableLabelFieldSchema,
+  governmentWarning: nullableLabelFieldSchema,
+  bottlerProducer: nullableLabelFieldSchema,
+  countryOfOrigin: nullableLabelFieldSchema,
+});
+
+// Schema for expected alcohol label data (required core fields)
+export const expectedAlcoholLabelSchema = z.object({
+  brandName: labelFieldSchema,
+  classType: labelFieldSchema,
+  alcoholContent: labelFieldSchema,
+  netContents: labelFieldSchema,
+  governmentWarning: labelFieldSchema,
+  bottlerProducer: nullableLabelFieldSchema,
+  countryOfOrigin: nullableLabelFieldSchema,
+});
+
+export type LabelField = z.infer<typeof labelFieldSchema>;
+export type ExtractedAlcoholLabel = z.infer<typeof extractedAlcoholLabelSchema>;
+export type ExpectedAlcoholLabel = z.infer<typeof expectedAlcoholLabelSchema>;
 
 // Schema for verification result
 export const verificationResultSchema = z.object({
@@ -26,8 +49,8 @@ export type VerificationResult = z.infer<typeof verificationResultSchema>;
 export const labelVerificationSchema = z.object({
   imageId: z.string(),
   imageName: z.string(),
-  extractedData: alcoholLabelSchema,
-  expectedData: alcoholLabelSchema,
+  extractedData: extractedAlcoholLabelSchema,
+  expectedData: expectedAlcoholLabelSchema,
   results: z.array(verificationResultSchema),
   overallStatus: z.enum(["✅", "⚠️", "❌"]),
 });

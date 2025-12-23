@@ -178,32 +178,48 @@ export default function ReviewPage() {
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Brand
               </dt>
-              <dd className="mt-1">{currentVerification.expectedData.brand}</dd>
+              <dd className="mt-1">{currentVerification.expectedData.brandName.text}</dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Class/Type
               </dt>
-              <dd className="mt-1">{currentVerification.expectedData.classType}</dd>
+              <dd className="mt-1">{currentVerification.expectedData.classType.text}</dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                ABV
+                Alcohol Content
               </dt>
-              <dd className="mt-1">{currentVerification.expectedData.abv}</dd>
+              <dd className="mt-1">{currentVerification.expectedData.alcoholContent.text}</dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Net Contents
               </dt>
-              <dd className="mt-1">{currentVerification.expectedData.netContents}</dd>
+              <dd className="mt-1">{currentVerification.expectedData.netContents.text}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
+                Bottler/Producer
+              </dt>
+              <dd className="mt-1">
+                {currentVerification.expectedData.bottlerProducer?.text ?? "Not provided"}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
+                Country of Origin
+              </dt>
+              <dd className="mt-1">
+                {currentVerification.expectedData.countryOfOrigin?.text ?? "Not provided"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Government Warning
               </dt>
               <dd className="mt-1 text-xs break-words">
-                {currentVerification.expectedData.govWarning}
+                {currentVerification.expectedData.governmentWarning.text}
               </dd>
             </div>
           </dl>
@@ -216,32 +232,56 @@ export default function ReviewPage() {
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Brand
               </dt>
-              <dd className="mt-1">{currentVerification.extractedData.brand}</dd>
+              <dd className="mt-1">
+                {currentVerification.extractedData.brandName?.text ?? "Not found"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Class/Type
               </dt>
-              <dd className="mt-1">{currentVerification.extractedData.classType}</dd>
+              <dd className="mt-1">
+                {currentVerification.extractedData.classType?.text ?? "Not found"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                ABV
+                Alcohol Content
               </dt>
-              <dd className="mt-1">{currentVerification.extractedData.abv}</dd>
+              <dd className="mt-1">
+                {currentVerification.extractedData.alcoholContent?.text ?? "Not found"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Net Contents
               </dt>
-              <dd className="mt-1">{currentVerification.extractedData.netContents}</dd>
+              <dd className="mt-1">
+                {currentVerification.extractedData.netContents?.text ?? "Not found"}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
+                Bottler/Producer
+              </dt>
+              <dd className="mt-1">
+                {currentVerification.extractedData.bottlerProducer?.text ?? "Not provided"}
+              </dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
+                Country of Origin
+              </dt>
+              <dd className="mt-1">
+                {currentVerification.extractedData.countryOfOrigin?.text ?? "Not provided"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Government Warning
               </dt>
               <dd className="mt-1 text-xs break-words">
-                {currentVerification.extractedData.govWarning}
+                {currentVerification.extractedData.governmentWarning?.text ?? "Not found"}
               </dd>
             </div>
           </dl>

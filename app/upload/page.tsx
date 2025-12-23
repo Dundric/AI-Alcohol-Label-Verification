@@ -3,8 +3,30 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { extractLabelData, batchExtractLabelData } from "@/lib/ocr";
-import { alcoholLabelSchema, AlcoholLabel, LabelVerification } from "@/lib/schemas";
+import {
+  expectedAlcoholLabelSchema,
+  ExpectedAlcoholLabel,
+  LabelField,
+  LabelVerification,
+} from "@/lib/schemas";
 import { compareLabels, calculateOverallStatus } from "@/lib/compare";
+
+type RequiredFieldKey =
+  | "brandName"
+  | "classType"
+  | "alcoholContent"
+  | "netContents"
+  | "governmentWarning";
+type OptionalFieldKey = "bottlerProducer" | "countryOfOrigin";
+
+function buildLabelField(text: string): LabelField {
+  const trimmed = text.trim();
+  return {
+    text,
+    isBold: false,
+    isAllCaps: trimmed.length > 0 && trimmed === trimmed.toUpperCase(),
+  };
+}
 
 export default function UploadPage() {
   const router = useRouter();
@@ -12,13 +34,16 @@ export default function UploadPage() {
   const [files, setFiles] = useState<File[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [expectedData, setExpectedData] = useState<AlcoholLabel>({
-    brand: "Jack Daniel's",
-    classType: "Tennessee Whiskey",
-    abv: "40%",
-    netContents: "750ml",
-    govWarning:
-      "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
+  const [expectedData, setExpectedData] = useState<ExpectedAlcoholLabel>({
+    brandName: buildLabelField("Jack Daniel's"),
+    classType: buildLabelField("Tennessee Whiskey"),
+    alcoholContent: buildLabelField("40%"),
+    netContents: buildLabelField("750ml"),
+    governmentWarning: buildLabelField(
+      "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    ),
+    bottlerProducer: null,
+    countryOfOrigin: null,
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -28,8 +53,19 @@ export default function UploadPage() {
     }
   };
 
-  const handleExpectedDataChange = (field: keyof AlcoholLabel, value: string) => {
-    setExpectedData((prev) => ({ ...prev, [field]: value }));
+  const handleRequiredDataChange = (field: RequiredFieldKey, value: string) => {
+    setExpectedData((prev) => ({
+      ...prev,
+      [field]: { ...prev[field], text: value },
+    }));
+  };
+
+  const handleOptionalDataChange = (field: OptionalFieldKey, value: string) => {
+    const trimmed = value.trim();
+    setExpectedData((prev) => ({
+      ...prev,
+      [field]: trimmed.length === 0 ? null : buildLabelField(value),
+    }));
   };
 
   const processImages = async () => {
@@ -40,7 +76,7 @@ export default function UploadPage() {
 
     try {
       // Validate expected data
-      alcoholLabelSchema.parse(expectedData);
+      expectedAlcoholLabelSchema.parse(expectedData);
     } catch (error) {
       alert("Please fill in all expected data fields correctly");
       return;
@@ -189,8 +225,8 @@ export default function UploadPage() {
             <input
               id="brand"
               type="text"
-              value={expectedData.brand}
-              onChange={(e) => handleExpectedDataChange("brand", e.target.value)}
+              value={expectedData.brandName.text}
+              onChange={(e) => handleRequiredDataChange("brandName", e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Expected brand name"
             />
@@ -202,24 +238,24 @@ export default function UploadPage() {
             <input
               id="classType"
               type="text"
-              value={expectedData.classType}
-              onChange={(e) => handleExpectedDataChange("classType", e.target.value)}
+              value={expectedData.classType.text}
+              onChange={(e) => handleRequiredDataChange("classType", e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Expected class or type"
             />
           </div>
           <div>
-            <label htmlFor="abv" className="block font-semibold mb-1">
-              ABV (Alcohol by Volume)
+            <label htmlFor="alcoholContent" className="block font-semibold mb-1">
+              Alcohol Content
             </label>
             <input
-              id="abv"
+              id="alcoholContent"
               type="text"
-              value={expectedData.abv}
-              onChange={(e) => handleExpectedDataChange("abv", e.target.value)}
+              value={expectedData.alcoholContent.text}
+              onChange={(e) => handleRequiredDataChange("alcoholContent", e.target.value)}
               placeholder="e.g., 40%"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              aria-label="Expected ABV percentage"
+              aria-label="Expected alcohol content"
             />
           </div>
           <div>
@@ -229,21 +265,47 @@ export default function UploadPage() {
             <input
               id="netContents"
               type="text"
-              value={expectedData.netContents}
-              onChange={(e) => handleExpectedDataChange("netContents", e.target.value)}
+              value={expectedData.netContents.text}
+              onChange={(e) => handleRequiredDataChange("netContents", e.target.value)}
               placeholder="e.g., 750ml"
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Expected net contents"
             />
           </div>
           <div>
-            <label htmlFor="govWarning" className="block font-semibold mb-1">
+            <label htmlFor="bottlerProducer" className="block font-semibold mb-1">
+              Bottler/Producer (Optional)
+            </label>
+            <input
+              id="bottlerProducer"
+              type="text"
+              value={expectedData.bottlerProducer?.text ?? ""}
+              onChange={(e) => handleOptionalDataChange("bottlerProducer", e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Expected bottler or producer"
+            />
+          </div>
+          <div>
+            <label htmlFor="countryOfOrigin" className="block font-semibold mb-1">
+              Country of Origin (Optional)
+            </label>
+            <input
+              id="countryOfOrigin"
+              type="text"
+              value={expectedData.countryOfOrigin?.text ?? ""}
+              onChange={(e) => handleOptionalDataChange("countryOfOrigin", e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Expected country of origin"
+            />
+          </div>
+          <div>
+            <label htmlFor="governmentWarning" className="block font-semibold mb-1">
               Government Warning
             </label>
             <textarea
-              id="govWarning"
-              value={expectedData.govWarning}
-              onChange={(e) => handleExpectedDataChange("govWarning", e.target.value)}
+              id="governmentWarning"
+              value={expectedData.governmentWarning.text}
+              onChange={(e) => handleRequiredDataChange("governmentWarning", e.target.value)}
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Expected government warning text"
