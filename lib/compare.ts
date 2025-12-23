@@ -1,7 +1,10 @@
 import {
+  AdditiveDisclosure,
   ExtractedAlcoholLabel,
   ExpectedAlcoholLabel,
-  LabelField,
+  GovernmentWarningField,
+  ProductType,
+  SimpleField,
   VerificationResult,
 } from "./schemas";
 
@@ -56,13 +59,165 @@ function similarityRatio(str1: string, str2: string): number {
   return 1 - distance / maxLength;
 }
 
+const BEER_CLASS_KEYWORDS = [
+  "beer",
+  "ale",
+  "lager",
+  "porter",
+  "stout",
+  "malt liquor",
+  "cereal beverage",
+  "near beer",
+  "wheat beer",
+  "rye beer",
+  "ice beer",
+  "barley wine",
+  "half and half",
+  "black and tan",
+];
+
+const WHISKEY_KEYWORDS = [
+  "whiskey",
+  "whisky",
+  "bourbon",
+  "rye whisky",
+  "rye whiskey",
+  "malt whisky",
+  "malt whiskey",
+  "straight whisky",
+  "straight whiskey",
+  "scotch",
+  "irish",
+  "canadian whisky",
+  "canadian whiskey",
+];
+
+const RUM_KEYWORDS = ["rum"];
+
+const WINE_KEYWORDS = [
+  "wine",
+  "champagne",
+  "sparkling",
+  "carbonated",
+  "cider",
+  "perry",
+  "sake",
+  "vermouth",
+  "sherry",
+  "port",
+  "madeira",
+  "muscatel",
+  "muscat",
+  "retsina",
+];
+
+const OTHER_SPIRITS_KEYWORDS = [
+  "vodka",
+  "gin",
+  "brandy",
+  "cognac",
+  "armagnac",
+  "pisco",
+  "grappa",
+  "applejack",
+  "tequila",
+  "mezcal",
+  "liqueur",
+  "cordial",
+  "schnapps",
+  "amaretto",
+  "triple sec",
+  "flavored",
+  "ouzo",
+  "cachaça",
+  "neutral spirits",
+  "grain spirits",
+];
+
+function deriveProductTypeFromClassType(
+  classType?: string | null
+): ProductType | null {
+  if (!classType) return null;
+  const normalized = classType.toLowerCase();
+
+  if (WHISKEY_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "whiskey";
+  }
+  if (RUM_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "rum";
+  }
+  if (BEER_CLASS_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "beer";
+  }
+  if (WINE_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "wine";
+  }
+  if (OTHER_SPIRITS_KEYWORDS.some((keyword) => normalized.includes(keyword))) {
+    return "other_spirits";
+  }
+
+  return null;
+}
+
+function resolveProductType(
+  extracted: ExtractedAlcoholLabel,
+  expected: ExpectedAlcoholLabel
+): ProductType | null {
+  return (
+    expected.productType ??
+    extracted.productType ??
+    deriveProductTypeFromClassType(expected.classType?.text) ??
+    deriveProductTypeFromClassType(extracted.classType?.text)
+  );
+}
+
+function parseAbv(text?: string | null): number | null {
+  if (!text) return null;
+  const match = text.match(/(\d+(\.\d+)?)/);
+  if (!match) return null;
+  return Number.parseFloat(match[1]);
+}
+
+function compareOptionalField(
+  label: string,
+  extracted: SimpleField | null,
+  expected: SimpleField
+): VerificationResult {
+  const extractedText = extracted?.text ?? "";
+  const normalizedExtracted = normalizeText(extractedText);
+  const normalizedExpected = normalizeText(expected.text);
+  const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
+
+  let status: "✅" | "⚠️" | "❌";
+  let message: string;
+
+  if (similarity > 0.9) {
+    status = "✅";
+    message = `${label} matches`;
+  } else if (similarity > 0.7) {
+    status = "⚠️";
+    message = `Partial match (${Math.round(similarity * 100)}% similar)`;
+  } else {
+    status = "❌";
+    message = `${label} does not match`;
+  }
+
+  return {
+    field: label,
+    extracted: extractedText,
+    expected: expected.text,
+    status,
+    message,
+  };
+}
+
 /**
  * Fuzzy match brand names with normalization
  * Returns ✅ if similarity > 0.85, ⚠️ if > 0.6, otherwise ❌
  */
 function compareBrand(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const normalizedExtracted = normalizeText(extractedText);
@@ -96,8 +251,8 @@ function compareBrand(
  * Compare class/type with fuzzy matching
  */
 function compareClassType(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const normalizedExtracted = normalizeText(extractedText);
@@ -132,8 +287,8 @@ function compareClassType(
  * Extracts numeric values and compares with tolerance
  */
 function compareAlcoholContent(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const extractedNum = parseFloat(extractedText.replace(/[^\d.]/g, ""));
@@ -167,8 +322,8 @@ function compareAlcoholContent(
  * Normalizes units and compares values
  */
 function compareNetContents(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const extractedNum = parseFloat(extractedText.replace(/[^\d.]/g, ""));
@@ -208,28 +363,22 @@ function compareNetContents(
  * Compare government warning - exact match required
  */
 function compareGovernmentWarning(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: GovernmentWarningField | null,
+  expected: GovernmentWarningField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
+  const normalizedExtracted = extractedText.replace(/\s+/g, " ").trim();
+  const normalizedExpected = expected.text.replace(/\s+/g, " ").trim();
 
-  let status: "✅" | "⚠️" | "❌";
+  let status: "✅" | "❌";
   let message: string;
 
   if (normalizedExtracted === normalizedExpected) {
     status = "✅";
     message = "Government warning matches exactly";
   } else {
-    const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
-    if (similarity > 0.95) {
-      status = "⚠️";
-      message = "Government warning nearly matches (minor differences)";
-    } else {
-      status = "❌";
-      message = "Government warning does not match";
-    }
+    status = "❌";
+    message = "Government warning does not match";
   }
 
   return {
@@ -241,9 +390,107 @@ function compareGovernmentWarning(
   };
 }
 
+function evaluateRegulatoryRules(
+  extracted: ExtractedAlcoholLabel,
+  expected: ExpectedAlcoholLabel
+): VerificationResult[] {
+  const results: VerificationResult[] = [];
+  const productType = resolveProductType(extracted, expected);
+
+  if (productType === "whiskey" && expected.ageYears !== null) {
+    if (expected.ageYears < 4 && !extracted.ageStatement?.text) {
+      results.push({
+        field: "Rule: Whiskey Age Statement",
+        extracted: extracted.ageStatement?.text ?? "Not found",
+        expected: `Age < 4 years (${expected.ageYears})`,
+        status: "❌",
+        message: "Age statement required for whiskey under 4 years",
+      });
+    }
+  }
+
+  if (productType === "rum" && extracted.ageStatement?.text) {
+    if (extracted.youngestAgeDisclosed === false) {
+      results.push({
+        field: "Rule: Rum Age Statement",
+        extracted: extracted.ageStatement.text,
+        expected: "Youngest age disclosed",
+        status: "❌",
+        message: "Rum age statement must reflect youngest spirit",
+      });
+    }
+  }
+
+  const additivesDetected = expected.additivesDetected;
+  const additivesDisclosed: AdditiveDisclosure | null =
+    extracted.additivesDisclosed ?? null;
+
+  const additiveRules: Array<[keyof AdditiveDisclosure, string]> = [
+    ["fdcYellowNo5", "FD&C Yellow No. 5"],
+    ["cochinealExtract", "cochineal extract"],
+    ["carmine", "carmine"],
+    ["aspartame", "aspartame"],
+    ["sulfitesGe10ppm", "sulfites >= 10PPM"],
+  ];
+
+  additiveRules.forEach(([key, label]) => {
+    if (additivesDetected[key] && !additivesDisclosed?.[key]) {
+      results.push({
+        field: "Rule: Additive Disclosure",
+        extracted: "Not disclosed",
+        expected: label,
+        status: "❌",
+        message: `Required additive disclosure missing: ${label}`,
+      });
+    }
+  });
+
+  if (expected.isImported) {
+    if (!extracted.countryOfOrigin?.text) {
+      results.push({
+        field: "Rule: Import Country",
+        extracted: "Not found",
+        expected: "Country of origin required",
+        status: "❌",
+        message: "Imported spirits must declare country of origin",
+      });
+    }
+  }
+
+  if (productType === "beer" && expected.beerHasAddedFlavorsWithAlcohol) {
+    if (!extracted.alcoholContent?.text) {
+      results.push({
+        field: "Rule: Beer Alcohol Content",
+        extracted: "Not found",
+        expected: "Alcohol content required",
+        status: "❌",
+        message:
+          "Beer with alcohol from added flavors or non-beverage ingredients must declare alcohol content",
+      });
+    }
+  }
+
+  if (productType === "wine") {
+    const abv =
+      parseAbv(expected.alcoholContent?.text) ??
+      parseAbv(extracted.alcoholContent?.text);
+    if (abv !== null && abv < 7) {
+      results.push({
+        field: "Rule: Wine AVC",
+        extracted: "Not required",
+        expected: "AVC number not required",
+        status: "✅",
+        message: "Wine < 7% ABV does not require AVC number",
+      });
+    }
+  }
+
+  return results;
+}
+
 function compareBottlerProducer(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const normalizedExtracted = normalizeText(extractedText);
@@ -274,8 +521,8 @@ function compareBottlerProducer(
 }
 
 function compareCountryOfOrigin(
-  extracted: LabelField | null,
-  expected: LabelField
+  extracted: SimpleField | null,
+  expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
   const normalizedExtracted = normalizeText(extractedText);
@@ -333,6 +580,8 @@ export function compareLabels(
       compareCountryOfOrigin(extracted.countryOfOrigin, expected.countryOfOrigin)
     );
   }
+
+  results.push(...evaluateRegulatoryRules(extracted, expected));
 
   return results;
 }

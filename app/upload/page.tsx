@@ -2,29 +2,41 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { ZodError } from "zod";
 import { extractLabelData, batchExtractLabelData } from "@/lib/ocr";
 import {
+  AdditiveDisclosure,
   expectedAlcoholLabelSchema,
   ExpectedAlcoholLabel,
-  LabelField,
+  GovernmentWarningField,
+  SimpleField,
   LabelVerification,
 } from "@/lib/schemas";
 import { compareLabels, calculateOverallStatus } from "@/lib/compare";
 
-type RequiredFieldKey =
-  | "brandName"
-  | "classType"
-  | "alcoholContent"
-  | "netContents"
-  | "governmentWarning";
-type OptionalFieldKey = "bottlerProducer" | "countryOfOrigin";
+type RequiredFieldKey = "brandName" | "classType" | "alcoholContent" | "netContents";
+type OptionalFieldKey =
+  | "bottlerProducer"
+  | "countryOfOrigin";
+type FlagFieldKey = "isImported" | "beerHasAddedFlavorsWithAlcohol";
 
-function buildLabelField(text: string): LabelField {
-  const trimmed = text.trim();
+const defaultAdditives: AdditiveDisclosure = {
+  fdcYellowNo5: false,
+  cochinealExtract: false,
+  carmine: false,
+  aspartame: false,
+  sulfitesGe10ppm: false,
+};
+
+function buildSimpleField(text: string): SimpleField {
+  return { text };
+}
+
+function buildGovernmentWarningField(text: string): GovernmentWarningField {
   return {
     text,
-    isBold: false,
-    isAllCaps: trimmed.length > 0 && trimmed === trimmed.toUpperCase(),
+    isBold: true,
+    isAllCaps: true,
   };
 }
 
@@ -35,15 +47,20 @@ export default function UploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
   const [expectedData, setExpectedData] = useState<ExpectedAlcoholLabel>({
-    brandName: buildLabelField("Jack Daniel's"),
-    classType: buildLabelField("Tennessee Whiskey"),
-    alcoholContent: buildLabelField("40%"),
-    netContents: buildLabelField("750ml"),
-    governmentWarning: buildLabelField(
-      "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS."
+    productType: null,
+    brandName: buildSimpleField("Jack Daniel's"),
+    classType: buildSimpleField("Tennessee Whiskey"),
+    alcoholContent: buildSimpleField("40%"),
+    netContents: buildSimpleField("750ml"),
+    governmentWarning: buildGovernmentWarningField(
+      "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems."
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageYears: null,
+    isImported: false,
+    beerHasAddedFlavorsWithAlcohol: false,
+    additivesDetected: defaultAdditives,
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -60,11 +77,43 @@ export default function UploadPage() {
     }));
   };
 
+  const handleGovernmentWarningChange = (value: string) => {
+    setExpectedData((prev) => ({
+      ...prev,
+      governmentWarning: { ...prev.governmentWarning, text: value },
+    }));
+  };
+
   const handleOptionalDataChange = (field: OptionalFieldKey, value: string) => {
     const trimmed = value.trim();
     setExpectedData((prev) => ({
       ...prev,
-      [field]: trimmed.length === 0 ? null : buildLabelField(value),
+      [field]: trimmed.length === 0 ? null : buildSimpleField(value),
+    }));
+  };
+
+  const handleFlagChange = (field: FlagFieldKey, value: boolean) => {
+    setExpectedData((prev) => ({
+      ...prev,
+      [field]: value,
+    }));
+  };
+
+  const handleAgeYearsChange = (value: string) => {
+    const parsed = Number.parseFloat(value);
+    setExpectedData((prev) => ({
+      ...prev,
+      ageYears: Number.isNaN(parsed) ? null : parsed,
+    }));
+  };
+
+  const handleAdditiveToggle = (
+    key: keyof AdditiveDisclosure,
+    value: boolean
+  ) => {
+    setExpectedData((prev) => ({
+      ...prev,
+      additivesDetected: { ...prev.additivesDetected, [key]: value },
     }));
   };
 
@@ -74,11 +123,29 @@ export default function UploadPage() {
       return;
     }
 
+    const normalizedExpectedData: ExpectedAlcoholLabel = {
+      ...expectedData,
+      governmentWarning: {
+        ...expectedData.governmentWarning,
+        isBold: true,
+        isAllCaps: true,
+      },
+    };
+
     try {
       // Validate expected data
-      expectedAlcoholLabelSchema.parse(expectedData);
+      expectedAlcoholLabelSchema.parse(normalizedExpectedData);
     } catch (error) {
-      alert("Please fill in all expected data fields correctly");
+      if (error instanceof ZodError) {
+        console.error("Expected data validation failed:", error.issues);
+        alert(
+          `Please check the expected fields:\n- ${error.issues
+            .map((issue) => issue.message)
+            .join("\n- ")}`
+        );
+      } else {
+        alert("Please fill in all expected data fields correctly");
+      }
       return;
     }
 
@@ -90,8 +157,12 @@ export default function UploadPage() {
 
       if (mode === "single") {
         const file = files[0];
-        const extractedData = await extractLabelData(file, file.name);
-        const results = compareLabels(extractedData, expectedData);
+        const extractedData = await extractLabelData(
+          file,
+          file.name,
+          normalizedExpectedData
+        );
+        const results = compareLabels(extractedData, normalizedExpectedData);
         const overallStatus = calculateOverallStatus(results);
 
         verifications = [
@@ -99,7 +170,7 @@ export default function UploadPage() {
             imageId: `img-${Date.now()}`,
             imageName: file.name,
             extractedData,
-            expectedData,
+            expectedData: normalizedExpectedData,
             results,
             overallStatus,
           },
@@ -108,18 +179,21 @@ export default function UploadPage() {
       } else {
         // Batch processing with progress updates
         const total = files.length;
-        const extractedResults = await batchExtractLabelData(files);
+        const extractedResults = await batchExtractLabelData(
+          files,
+          normalizedExpectedData
+        );
 
         for (let i = 0; i < extractedResults.length; i++) {
           const { name, data: extractedData } = extractedResults[i];
-          const results = compareLabels(extractedData, expectedData);
+          const results = compareLabels(extractedData, normalizedExpectedData);
           const overallStatus = calculateOverallStatus(results);
 
           verifications.push({
             imageId: `img-${Date.now()}-${i}`,
             imageName: name,
             extractedData,
-            expectedData,
+            expectedData: normalizedExpectedData,
             results,
             overallStatus,
           });
@@ -299,13 +373,116 @@ export default function UploadPage() {
             />
           </div>
           <div>
+            <label htmlFor="ageYears" className="block font-semibold mb-1">
+              Age (Years) (Optional)
+            </label>
+            <input
+              id="ageYears"
+              type="number"
+              min="0"
+              step="0.1"
+              value={expectedData.ageYears ?? ""}
+              onChange={(e) => handleAgeYearsChange(e.target.value)}
+              className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
+              aria-label="Expected age in years"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="isImported"
+              type="checkbox"
+              checked={expectedData.isImported}
+              onChange={(e) => handleFlagChange("isImported", e.target.checked)}
+              className="w-4 h-4"
+              aria-label="Product is imported"
+            />
+            <label htmlFor="isImported" className="font-semibold">
+              Imported Product
+            </label>
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              id="beerHasAddedFlavorsWithAlcohol"
+              type="checkbox"
+              checked={expectedData.beerHasAddedFlavorsWithAlcohol}
+              onChange={(e) =>
+                handleFlagChange("beerHasAddedFlavorsWithAlcohol", e.target.checked)
+              }
+              className="w-4 h-4"
+              aria-label="Beer has alcohol from added flavors"
+            />
+            <label htmlFor="beerHasAddedFlavorsWithAlcohol" className="font-semibold">
+              Beer contains alcohol from added flavors
+            </label>
+          </div>
+          <div>
+            <span className="block font-semibold mb-2">Additives Detected</span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={expectedData.additivesDetected.fdcYellowNo5}
+                  onChange={(e) =>
+                    handleAdditiveToggle("fdcYellowNo5", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+                <span>FD&amp;C Yellow No. 5</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={expectedData.additivesDetected.cochinealExtract}
+                  onChange={(e) =>
+                    handleAdditiveToggle("cochinealExtract", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+                <span>cochineal extract</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={expectedData.additivesDetected.carmine}
+                  onChange={(e) =>
+                    handleAdditiveToggle("carmine", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+                <span>carmine</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={expectedData.additivesDetected.aspartame}
+                  onChange={(e) =>
+                    handleAdditiveToggle("aspartame", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+                <span>aspartame</span>
+              </label>
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={expectedData.additivesDetected.sulfitesGe10ppm}
+                  onChange={(e) =>
+                    handleAdditiveToggle("sulfitesGe10ppm", e.target.checked)
+                  }
+                  className="w-4 h-4"
+                />
+                <span>sulfites &gt;= 10PPM</span>
+              </label>
+            </div>
+          </div>
+          <div>
             <label htmlFor="governmentWarning" className="block font-semibold mb-1">
               Government Warning
             </label>
             <textarea
               id="governmentWarning"
               value={expectedData.governmentWarning.text}
-              onChange={(e) => handleRequiredDataChange("governmentWarning", e.target.value)}
+              onChange={(e) => handleGovernmentWarningChange(e.target.value)}
               rows={4}
               className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
               aria-label="Expected government warning text"

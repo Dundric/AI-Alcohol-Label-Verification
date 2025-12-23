@@ -1,94 +1,130 @@
 import {
+  AdditiveDisclosure,
   extractedAlcoholLabelSchema,
   ExtractedAlcoholLabel,
-  LabelField,
+  ExpectedAlcoholLabel,
+  GovernmentWarningField,
+  SimpleField,
 } from "./schemas";
 
-function inferAllCaps(text: string): boolean {
-  const trimmed = text.trim();
-  return trimmed.length > 0 && trimmed === trimmed.toUpperCase();
+function makeSimpleField(text: string): SimpleField {
+  return { text };
 }
 
-function makeLabelField(
+function makeGovernmentWarningField(
   text: string,
-  options: Partial<Pick<LabelField, "isBold" | "isAllCaps">> = {}
-): LabelField {
+  options: Partial<Pick<GovernmentWarningField, "isBold" | "isAllCaps">> = {}
+): GovernmentWarningField {
   return {
     text,
-    isBold: options.isBold ?? false,
-    isAllCaps: options.isAllCaps ?? inferAllCaps(text),
+    isBold: options.isBold ?? true,
+    isAllCaps: options.isAllCaps ?? true,
+  };
+}
+
+function emptyAdditives(): AdditiveDisclosure {
+  return {
+    fdcYellowNo5: false,
+    cochinealExtract: false,
+    carmine: false,
+    aspartame: false,
+    sulfitesGe10ppm: false,
   };
 }
 
 // Simulated OCR data for different alcohol types
 const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
   whiskey: {
-    brandName: makeLabelField("Jack Daniel's", { isBold: true }),
-    classType: makeLabelField("Tennessee Whiskey"),
-    alcoholContent: makeLabelField("40%"),
-    netContents: makeLabelField("750ml"),
-    governmentWarning: makeLabelField(
+    productType: "whiskey",
+    brandName: makeSimpleField("Jack Daniel's"),
+    classType: makeSimpleField("Tennessee Whiskey"),
+    alcoholContent: makeSimpleField("40%"),
+    netContents: makeSimpleField("750ml"),
+    governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
-      { isAllCaps: true }
+      { isBold: true, isAllCaps: true }
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageStatement: null,
+    youngestAgeDisclosed: null,
+    additivesDisclosed: emptyAdditives(),
   },
   wine: {
-    brandName: makeLabelField("Chateau Margaux", { isBold: true }),
-    classType: makeLabelField("Red Wine"),
-    alcoholContent: makeLabelField("13.5%"),
-    netContents: makeLabelField("750ml"),
-    governmentWarning: makeLabelField(
+    productType: "wine",
+    brandName: makeSimpleField("Chateau Margaux"),
+    classType: makeSimpleField("Red Wine"),
+    alcoholContent: makeSimpleField("13.5%"),
+    netContents: makeSimpleField("750ml"),
+    governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
-      { isAllCaps: true }
+      { isBold: true, isAllCaps: true }
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageStatement: null,
+    youngestAgeDisclosed: null,
+    additivesDisclosed: emptyAdditives(),
   },
   beer: {
-    brandName: makeLabelField("Budweiser", { isBold: true }),
-    classType: makeLabelField("Lager Beer"),
-    alcoholContent: makeLabelField("5%"),
-    netContents: makeLabelField("355ml"),
-    governmentWarning: makeLabelField(
+    productType: "beer",
+    brandName: makeSimpleField("Budweiser"),
+    classType: makeSimpleField("Lager Beer"),
+    alcoholContent: makeSimpleField("5%"),
+    netContents: makeSimpleField("355ml"),
+    governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
-      { isAllCaps: true }
+      { isBold: true, isAllCaps: true }
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageStatement: null,
+    youngestAgeDisclosed: null,
+    additivesDisclosed: emptyAdditives(),
   },
   vodka: {
-    brandName: makeLabelField("Grey Goose", { isBold: true }),
-    classType: makeLabelField("Vodka"),
-    alcoholContent: makeLabelField("40%"),
-    netContents: makeLabelField("1l"),
-    governmentWarning: makeLabelField(
+    productType: "other_spirits",
+    brandName: makeSimpleField("Grey Goose"),
+    classType: makeSimpleField("Vodka"),
+    alcoholContent: makeSimpleField("40%"),
+    netContents: makeSimpleField("1l"),
+    governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
-      { isAllCaps: true }
+      { isBold: true, isAllCaps: true }
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageStatement: null,
+    youngestAgeDisclosed: null,
+    additivesDisclosed: emptyAdditives(),
   },
   rum: {
-    brandName: makeLabelField("Captain Morgan", { isBold: true }),
-    classType: makeLabelField("Spiced Rum"),
-    alcoholContent: makeLabelField("35%"),
-    netContents: makeLabelField("700ml"),
-    governmentWarning: makeLabelField(
+    productType: "rum",
+    brandName: makeSimpleField("Captain Morgan"),
+    classType: makeSimpleField("Spiced Rum"),
+    alcoholContent: makeSimpleField("35%"),
+    netContents: makeSimpleField("700ml"),
+    governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
-      { isAllCaps: true }
+      { isBold: true, isAllCaps: true }
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
+    ageStatement: null,
+    youngestAgeDisclosed: null,
+    additivesDisclosed: emptyAdditives(),
   },
 };
 
 async function requestStructuredLabelData(
-  imageFile: File
+  imageFile: File,
+  expectedData?: ExpectedAlcoholLabel
 ): Promise<ExtractedAlcoholLabel> {
   const formData = new FormData();
   formData.append("image", imageFile);
+  if (expectedData) {
+    formData.append("expected", JSON.stringify(expectedData));
+  }
 
   const response = await fetch("/api/extract-label", {
     method: "POST",
@@ -141,14 +177,15 @@ function getMockLabelData(imageName: string): ExtractedAlcoholLabel {
  */
 export async function extractLabelData(
   imageFile: File | null,
-  imageName: string
+  imageName: string,
+  expectedData?: ExpectedAlcoholLabel
 ): Promise<ExtractedAlcoholLabel> {
   if (!imageFile) {
     return getMockLabelData(imageName);
   }
 
   try {
-    return await requestStructuredLabelData(imageFile);
+    return await requestStructuredLabelData(imageFile, expectedData);
   } catch (error) {
     console.error("Falling back to mock OCR data:", error);
     return getMockLabelData(imageName);
@@ -162,12 +199,13 @@ export async function extractLabelData(
  * @returns Promise<Array<{name: string, data: ExtractedAlcoholLabel}>> - Array of extracted data
  */
 export async function batchExtractLabelData(
-  files: File[]
+  files: File[],
+  expectedData?: ExpectedAlcoholLabel
 ): Promise<Array<{ name: string; data: ExtractedAlcoholLabel }>> {
   const results = await Promise.all(
     files.map(async (file) => ({
       name: file.name,
-      data: await extractLabelData(file, file.name),
+      data: await extractLabelData(file, file.name, expectedData),
     }))
   );
 

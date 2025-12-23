@@ -1,38 +1,82 @@
 import { z } from "zod";
 
-export const labelFieldSchema = z.object({
+export const simpleFieldSchema = z.object({
   text: z.string().min(1, "Field text is required"),
+});
+
+const nullableSimpleFieldSchema = simpleFieldSchema.nullable();
+
+const governmentWarningSchema = z.object({
+  text: z.string().min(1, "Government warning is required"),
   isBold: z.boolean(),
   isAllCaps: z.boolean(),
 });
 
-const nullableLabelFieldSchema = labelFieldSchema.nullable();
+const nullableGovernmentWarningSchema = governmentWarningSchema.nullable();
+
+export const additiveDisclosureSchema = z.object({
+  fdcYellowNo5: z.boolean(),
+  cochinealExtract: z.boolean(),
+  carmine: z.boolean(),
+  aspartame: z.boolean(),
+  sulfitesGe10ppm: z.boolean(),
+});
+
+export const productTypeSchema = z.enum([
+  "beer",
+  "wine",
+  "whiskey",
+  "rum",
+  "other_spirits",
+]);
+
+
+
 
 // Schema for extracted alcohol label data (nullable for missing fields)
 export const extractedAlcoholLabelSchema = z.object({
-  brandName: nullableLabelFieldSchema,
-  classType: nullableLabelFieldSchema,
-  alcoholContent: nullableLabelFieldSchema,
-  netContents: nullableLabelFieldSchema,
-  governmentWarning: nullableLabelFieldSchema,
-  bottlerProducer: nullableLabelFieldSchema,
-  countryOfOrigin: nullableLabelFieldSchema,
+  productType: productTypeSchema.nullable(),
+  brandName: nullableSimpleFieldSchema,
+  classType: nullableSimpleFieldSchema,
+  alcoholContent: nullableSimpleFieldSchema,
+  netContents: nullableSimpleFieldSchema,
+  governmentWarning: nullableGovernmentWarningSchema,
+  bottlerProducer: nullableSimpleFieldSchema,
+  countryOfOrigin: nullableSimpleFieldSchema,
+  ageStatement: nullableSimpleFieldSchema,
+  youngestAgeDisclosed: z.boolean().nullable(),
+  additivesDisclosed: additiveDisclosureSchema.nullable(),
 });
 
 // Schema for expected alcohol label data (required core fields)
 export const expectedAlcoholLabelSchema = z.object({
-  brandName: labelFieldSchema,
-  classType: labelFieldSchema,
-  alcoholContent: labelFieldSchema,
-  netContents: labelFieldSchema,
-  governmentWarning: labelFieldSchema,
-  bottlerProducer: nullableLabelFieldSchema,
-  countryOfOrigin: nullableLabelFieldSchema,
+  productType: productTypeSchema.nullable(),
+  brandName: simpleFieldSchema,
+  classType: simpleFieldSchema,
+  alcoholContent: simpleFieldSchema,
+  netContents: simpleFieldSchema,
+  governmentWarning: governmentWarningSchema,
+  bottlerProducer: nullableSimpleFieldSchema,
+  countryOfOrigin: nullableSimpleFieldSchema,
+  ageYears: z.number().min(0).nullable(),
+  isImported: z.boolean(),
+  beerHasAddedFlavorsWithAlcohol: z.boolean(),
+  additivesDetected: additiveDisclosureSchema,
 });
 
-export type LabelField = z.infer<typeof labelFieldSchema>;
+export type SimpleField = z.infer<typeof simpleFieldSchema>;
+export type GovernmentWarningField = z.infer<typeof governmentWarningSchema>;
+export type AdditiveDisclosure = z.infer<typeof additiveDisclosureSchema>;
+export type ProductType = z.infer<typeof productTypeSchema>;
 export type ExtractedAlcoholLabel = z.infer<typeof extractedAlcoholLabelSchema>;
 export type ExpectedAlcoholLabel = z.infer<typeof expectedAlcoholLabelSchema>;
+
+export const accuracyDecisionSchema = z.object({
+  accurate: z.boolean(),
+  notes: z.string(),
+});
+
+export type AccuracyDecision = z.infer<typeof accuracyDecisionSchema>;
 
 // Schema for verification result
 export const verificationResultSchema = z.object({
