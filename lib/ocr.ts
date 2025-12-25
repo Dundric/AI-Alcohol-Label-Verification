@@ -1,11 +1,17 @@
 import {
   AdditiveDisclosure,
+  AccuracyDecision,
   extractedAlcoholLabelSchema,
   ExtractedAlcoholLabel,
   ExpectedAlcoholLabel,
   GovernmentWarningField,
   SimpleField,
 } from "./schemas";
+
+type ExtractLabelResponse = {
+  label: ExtractedAlcoholLabel;
+  evaluation: AccuracyDecision | null;
+};
 
 function makeSimpleField(text: string): SimpleField {
   return { text };
@@ -35,7 +41,6 @@ function emptyAdditives(): AdditiveDisclosure {
 // Simulated OCR data for different alcohol types
 const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
   whiskey: {
-    productType: "whiskey",
     brandName: makeSimpleField("Jack Daniel's"),
     classType: makeSimpleField("Tennessee Whiskey"),
     alcoholContent: makeSimpleField("40%"),
@@ -46,12 +51,9 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
-    ageStatement: null,
-    youngestAgeDisclosed: null,
     additivesDisclosed: emptyAdditives(),
   },
   wine: {
-    productType: "wine",
     brandName: makeSimpleField("Chateau Margaux"),
     classType: makeSimpleField("Red Wine"),
     alcoholContent: makeSimpleField("13.5%"),
@@ -62,12 +64,9 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
-    ageStatement: null,
-    youngestAgeDisclosed: null,
     additivesDisclosed: emptyAdditives(),
   },
   beer: {
-    productType: "beer",
     brandName: makeSimpleField("Budweiser"),
     classType: makeSimpleField("Lager Beer"),
     alcoholContent: makeSimpleField("5%"),
@@ -78,12 +77,9 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
-    ageStatement: null,
-    youngestAgeDisclosed: null,
     additivesDisclosed: emptyAdditives(),
   },
   vodka: {
-    productType: "other_spirits",
     brandName: makeSimpleField("Grey Goose"),
     classType: makeSimpleField("Vodka"),
     alcoholContent: makeSimpleField("40%"),
@@ -94,12 +90,9 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
-    ageStatement: null,
-    youngestAgeDisclosed: null,
     additivesDisclosed: emptyAdditives(),
   },
   rum: {
-    productType: "rum",
     brandName: makeSimpleField("Captain Morgan"),
     classType: makeSimpleField("Spiced Rum"),
     alcoholContent: makeSimpleField("35%"),
@@ -110,8 +103,6 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
     ),
     bottlerProducer: null,
     countryOfOrigin: null,
-    ageStatement: null,
-    youngestAgeDisclosed: null,
     additivesDisclosed: emptyAdditives(),
   },
 };
@@ -119,7 +110,7 @@ const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
 async function requestStructuredLabelData(
   imageFile: File,
   expectedData?: ExpectedAlcoholLabel
-): Promise<ExtractedAlcoholLabel> {
+): Promise<ExtractLabelResponse> {
   const formData = new FormData();
   formData.append("image", imageFile);
   if (expectedData) {
@@ -142,7 +133,10 @@ async function requestStructuredLabelData(
     throw new Error("Invalid label response");
   }
 
-  return parsed.data;
+  return {
+    label: parsed.data,
+    evaluation: data?.evaluation ?? null,
+  };
 }
 
 function getMockLabelData(imageName: string): ExtractedAlcoholLabel {
@@ -179,16 +173,16 @@ export async function extractLabelData(
   imageFile: File | null,
   imageName: string,
   expectedData?: ExpectedAlcoholLabel
-): Promise<ExtractedAlcoholLabel> {
+): Promise<ExtractLabelResponse> {
   if (!imageFile) {
-    return getMockLabelData(imageName);
+    return { label: getMockLabelData(imageName), evaluation: null };
   }
 
   try {
     return await requestStructuredLabelData(imageFile, expectedData);
   } catch (error) {
     console.error("Falling back to mock OCR data:", error);
-    return getMockLabelData(imageName);
+    return { label: getMockLabelData(imageName), evaluation: null };
   }
 }
 
@@ -201,7 +195,7 @@ export async function extractLabelData(
 export async function batchExtractLabelData(
   files: File[],
   expectedData?: ExpectedAlcoholLabel
-): Promise<Array<{ name: string; data: ExtractedAlcoholLabel }>> {
+): Promise<Array<{ name: string; data: ExtractLabelResponse }>> {
   const results = await Promise.all(
     files.map(async (file) => ({
       name: file.name,

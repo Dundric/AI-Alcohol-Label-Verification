@@ -106,6 +106,40 @@ export default function ReviewPage() {
           <div className="text-2xl">{currentVerification.overallStatus}</div>
         </div>
 
+        {currentVerification.evaluation && (
+          <div className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <div className="flex items-center justify-between">
+              <h3 className="font-semibold">AI Evaluation</h3>
+              <span className="text-sm font-semibold">
+                {currentVerification.evaluation.accurate ? "✅ Accurate" : "❌ Not Accurate"}
+              </span>
+            </div>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              {currentVerification.evaluation.notes}
+            </p>
+          </div>
+        )}
+
+        {currentVerification.results.some(
+          (result) => result.field === "Rule: Additive Disclosure"
+        ) && (
+          <div className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
+            <h3 className="font-semibold">Additive Disclosure Checks</h3>
+            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
+              Review any required additive disclosures (including sulfites).
+            </p>
+            <ul className="mt-3 text-sm text-gray-700 dark:text-gray-300 space-y-1">
+              {currentVerification.results
+                .filter((result) => result.field === "Rule: Additive Disclosure")
+                .map((result, index) => (
+                  <li key={`${result.field}-${index}`}>
+                    {result.status} {result.message}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+
         <div className="overflow-x-auto">
           <table className="w-full border-collapse">
             <thead>
@@ -190,7 +224,9 @@ export default function ReviewPage() {
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
                 Alcohol Content
               </dt>
-              <dd className="mt-1">{currentVerification.expectedData.alcoholContent.text}</dd>
+              <dd className="mt-1">
+                {currentVerification.expectedData.alcoholContent?.text ?? "Not provided"}
+              </dd>
             </div>
             <div>
               <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">

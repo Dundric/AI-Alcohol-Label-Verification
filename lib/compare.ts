@@ -1,4 +1,5 @@
 import {
+  AccuracyDecision,
   AdditiveDisclosure,
   ExtractedAlcoholLabel,
   ExpectedAlcoholLabel,
@@ -18,6 +19,19 @@ function normalizeText(text: string): string {
     .replace(/\s+/g, " ")
     .trim();
 }
+
+function normalizeWhitespace(text: string): string {
+  return text.replace(/\s+/g, " ").trim();
+}
+
+function normalizeGovWarning(text: string): string {
+  return normalizeWhitespace(text).toUpperCase();
+}
+
+const STANDARD_GOV_WARNINGS = [
+  "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES.",
+  "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
+].map(normalizeGovWarning);
 
 /**
  * Calculate Levenshtein distance between two strings for fuzzy matching
@@ -165,7 +179,6 @@ function resolveProductType(
 ): ProductType | null {
   return (
     expected.productType ??
-    extracted.productType ??
     deriveProductTypeFromClassType(expected.classType?.text) ??
     deriveProductTypeFromClassType(extracted.classType?.text)
   );
@@ -367,15 +380,21 @@ function compareGovernmentWarning(
   expected: GovernmentWarningField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = extractedText.replace(/\s+/g, " ").trim();
-  const normalizedExpected = expected.text.replace(/\s+/g, " ").trim();
+  const normalizedExtracted = normalizeGovWarning(extractedText);
+  const normalizedExpected = normalizeGovWarning(expected.text);
 
   let status: "✅" | "❌";
   let message: string;
 
+  const expectedIsStandard = STANDARD_GOV_WARNINGS.includes(normalizedExpected);
+  const extractedIsStandard = STANDARD_GOV_WARNINGS.includes(normalizedExtracted);
+
   if (normalizedExtracted === normalizedExpected) {
     status = "✅";
     message = "Government warning matches exactly";
+  } else if (expectedIsStandard && extractedIsStandard) {
+    status = "✅";
+    message = "Government warning matches standard wording";
   } else {
     status = "❌";
     message = "Government warning does not match";
@@ -395,31 +414,6 @@ function evaluateRegulatoryRules(
   expected: ExpectedAlcoholLabel
 ): VerificationResult[] {
   const results: VerificationResult[] = [];
-  const productType = resolveProductType(extracted, expected);
-
-  if (productType === "whiskey" && expected.ageYears !== null) {
-    if (expected.ageYears < 4 && !extracted.ageStatement?.text) {
-      results.push({
-        field: "Rule: Whiskey Age Statement",
-        extracted: extracted.ageStatement?.text ?? "Not found",
-        expected: `Age < 4 years (${expected.ageYears})`,
-        status: "❌",
-        message: "Age statement required for whiskey under 4 years",
-      });
-    }
-  }
-
-  if (productType === "rum" && extracted.ageStatement?.text) {
-    if (extracted.youngestAgeDisclosed === false) {
-      results.push({
-        field: "Rule: Rum Age Statement",
-        extracted: extracted.ageStatement.text,
-        expected: "Youngest age disclosed",
-        status: "❌",
-        message: "Rum age statement must reflect youngest spirit",
-      });
-    }
-  }
 
   const additivesDetected = expected.additivesDetected;
   const additivesDisclosed: AdditiveDisclosure | null =
@@ -430,7 +424,7 @@ function evaluateRegulatoryRules(
     ["cochinealExtract", "cochineal extract"],
     ["carmine", "carmine"],
     ["aspartame", "aspartame"],
-    ["sulfitesGe10ppm", "sulfites >= 10PPM"],
+    ["sulfitesGe10ppm", "Contains Sulfites"],
   ];
 
   additiveRules.forEach(([key, label]) => {
@@ -453,34 +447,6 @@ function evaluateRegulatoryRules(
         expected: "Country of origin required",
         status: "❌",
         message: "Imported spirits must declare country of origin",
-      });
-    }
-  }
-
-  if (productType === "beer" && expected.beerHasAddedFlavorsWithAlcohol) {
-    if (!extracted.alcoholContent?.text) {
-      results.push({
-        field: "Rule: Beer Alcohol Content",
-        extracted: "Not found",
-        expected: "Alcohol content required",
-        status: "❌",
-        message:
-          "Beer with alcohol from added flavors or non-beverage ingredients must declare alcohol content",
-      });
-    }
-  }
-
-  if (productType === "wine") {
-    const abv =
-      parseAbv(expected.alcoholContent?.text) ??
-      parseAbv(extracted.alcoholContent?.text);
-    if (abv !== null && abv < 7) {
-      results.push({
-        field: "Rule: Wine AVC",
-        extracted: "Not required",
-        expected: "AVC number not required",
-        status: "✅",
-        message: "Wine < 7% ABV does not require AVC number",
       });
     }
   }
@@ -527,11 +493,20 @@ function compareCountryOfOrigin(
   const extractedText = extracted?.text ?? "";
   const normalizedExtracted = normalizeText(extractedText);
   const normalizedExpected = normalizeText(expected.text);
+  const cleanedExtracted = normalizedExtracted
+    .replace(/\b(produced in|made in|product of|imported from|origin)\b/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
 
   let status: "✅" | "⚠️" | "❌";
   let message: string;
 
-  if (normalizedExtracted === normalizedExpected) {
+  if (
+    normalizedExtracted === normalizedExpected ||
+    cleanedExtracted === normalizedExpected ||
+    normalizedExtracted.includes(normalizedExpected) ||
+    cleanedExtracted.includes(normalizedExpected)
+  ) {
     status = "✅";
     message = "Country of origin matches";
   } else {
@@ -554,24 +529,45 @@ function compareCountryOfOrigin(
   };
 }
 
+function applyAIEvaluationStatus(
+  results: VerificationResult[],
+  evaluation?: AccuracyDecision | null
+): VerificationResult[] {
+  if (!evaluation) {
+    return results.map((result) =>
+      result.field === "Government Warning"
+        ? result
+        : { ...result, status: "⚠️" }
+    );
+  }
+
+  const status: "✅" | "❌" = evaluation.accurate ? "✅" : "❌";
+  return results.map((result) =>
+    result.field === "Government Warning"
+      ? result
+      : { ...result, status }
+  );
+}
+
 /**
  * Compare all fields of alcohol labels
  */
 export function compareLabels(
   extracted: ExtractedAlcoholLabel,
-  expected: ExpectedAlcoholLabel
+  expected: ExpectedAlcoholLabel,
+  evaluation?: AccuracyDecision | null
 ): VerificationResult[] {
   const results = [
     compareBrand(extracted.brandName, expected.brandName),
     compareClassType(extracted.classType, expected.classType),
-    compareAlcoholContent(extracted.alcoholContent, expected.alcoholContent),
     compareNetContents(extracted.netContents, expected.netContents),
     compareGovernmentWarning(extracted.governmentWarning, expected.governmentWarning),
+    compareBottlerProducer(extracted.bottlerProducer, expected.bottlerProducer),
   ];
 
-  if (expected.bottlerProducer) {
+  if (expected.alcoholContent) {
     results.push(
-      compareBottlerProducer(extracted.bottlerProducer, expected.bottlerProducer)
+      compareAlcoholContent(extracted.alcoholContent, expected.alcoholContent)
     );
   }
 
@@ -583,7 +579,7 @@ export function compareLabels(
 
   results.push(...evaluateRegulatoryRules(extracted, expected));
 
-  return results;
+  return applyAIEvaluationStatus(results, evaluation);
 }
 
 /**

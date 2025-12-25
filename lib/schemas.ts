@@ -30,12 +30,31 @@ export const productTypeSchema = z.enum([
   "other_spirits",
 ]);
 
+const BEER_CLASS_KEYWORDS = [
+  "beer",
+  "ale",
+  "lager",
+  "porter",
+  "stout",
+  "malt liquor",
+  "cereal beverage",
+  "near beer",
+  "wheat beer",
+  "rye beer",
+  "ice beer",
+  "barley wine",
+  "half and half",
+  "black and tan",
+];
 
-
+function isBeerClassType(value?: string | null): boolean {
+  if (!value) return false;
+  const normalized = value.toLowerCase();
+  return BEER_CLASS_KEYWORDS.some((keyword) => normalized.includes(keyword));
+}
 
 // Schema for extracted alcohol label data (nullable for missing fields)
 export const extractedAlcoholLabelSchema = z.object({
-  productType: productTypeSchema.nullable(),
   brandName: nullableSimpleFieldSchema,
   classType: nullableSimpleFieldSchema,
   alcoholContent: nullableSimpleFieldSchema,
@@ -43,20 +62,20 @@ export const extractedAlcoholLabelSchema = z.object({
   governmentWarning: nullableGovernmentWarningSchema,
   bottlerProducer: nullableSimpleFieldSchema,
   countryOfOrigin: nullableSimpleFieldSchema,
-  ageStatement: nullableSimpleFieldSchema,
-  youngestAgeDisclosed: z.boolean().nullable(),
   additivesDisclosed: additiveDisclosureSchema.nullable(),
 });
+
+export const partialLabel = extractedAlcoholLabelSchema.partial();
 
 // Schema for expected alcohol label data (required core fields)
 export const expectedAlcoholLabelSchema = z.object({
   productType: productTypeSchema.nullable(),
   brandName: simpleFieldSchema,
   classType: simpleFieldSchema,
-  alcoholContent: simpleFieldSchema,
+  alcoholContent: nullableSimpleFieldSchema,
   netContents: simpleFieldSchema,
   governmentWarning: governmentWarningSchema,
-  bottlerProducer: nullableSimpleFieldSchema,
+  bottlerProducer: simpleFieldSchema,
   countryOfOrigin: nullableSimpleFieldSchema,
   ageYears: z.number().min(0).nullable(),
   isImported: z.boolean(),
@@ -74,6 +93,18 @@ export type ExpectedAlcoholLabel = z.infer<typeof expectedAlcoholLabelSchema>;
 export const accuracyDecisionSchema = z.object({
   accurate: z.boolean(),
   notes: z.string(),
+  mismatchedFields: z.array(
+    z.enum([
+      "brandName",
+      "classType",
+      "alcoholContent",
+      "netContents",
+      "governmentWarning",
+      "bottlerProducer",
+      "countryOfOrigin",
+      "additivesDisclosed",
+    ])
+  ),
 });
 
 export type AccuracyDecision = z.infer<typeof accuracyDecisionSchema>;
@@ -95,6 +126,7 @@ export const labelVerificationSchema = z.object({
   imageName: z.string(),
   extractedData: extractedAlcoholLabelSchema,
   expectedData: expectedAlcoholLabelSchema,
+  evaluation: accuracyDecisionSchema.nullable().optional(),
   results: z.array(verificationResultSchema),
   overallStatus: z.enum(["✅", "⚠️", "❌"]),
 });
