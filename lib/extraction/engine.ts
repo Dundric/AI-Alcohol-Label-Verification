@@ -100,7 +100,7 @@ export async function runExtractionPasses(
   logger.log("[extract-label] running parallel extractions");
   const extractionResults = await Promise.all([
     runExtractionPass(client, deployment, imageUrl, logger.log, 1),
-    runExtractionPass(client, deployment, imageUrl, logger.log, 2),
+    runExtractionPass(client, deployment, imageUrl, logger.log, 2)
   ]);
 
   // Filter out any responses that failed schema parsing.
