@@ -7,7 +7,7 @@ export const REQUIRED_CSV_COLUMNS = [
   "bottler_producer",
 ];
 
-export const CSV_PARALLEL_LIMIT = 5;
+export const CSV_PARALLEL_LIMIT = 10;
 
 export const IMAGE_EXTENSIONS = [
   ".jpg",
