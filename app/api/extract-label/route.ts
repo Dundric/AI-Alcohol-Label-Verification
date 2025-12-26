@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { extractLabelFromFormData } from "@/lib/extractLabel";
+import { extractLabelFromFormData } from "@/lib/extraction";
 
 export const runtime = "nodejs";
 

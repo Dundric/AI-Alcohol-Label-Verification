@@ -68,7 +68,8 @@ export default function UploadPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
 
-  const { files, handleFileChange, handleFolderChange } = useImageSelection();
+  const { files, fileError, handleFileChange, handleFolderChange } =
+    useImageSelection();
   const { expectedData, handlers: expectedHandlers } = useExpectedLabelForm();
   const { csvExpectedMap, csvError, handleCsvChange } = useCsvExpectedData();
 
@@ -205,6 +206,7 @@ export default function UploadPage() {
       <ImageUploadCard
         mode={mode}
         files={files}
+        fileError={fileError}
         onFileChange={handleFileChange}
         onFolderChange={handleFolderChange}
       />

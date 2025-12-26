@@ -7,6 +7,7 @@ import { SelectedFilesList } from "./SelectedFilesList";
 type ImageUploadCardProps = {
   mode: UploadMode;
   files: File[];
+  fileError?: string | null;
   onFileChange: (event: ChangeEvent<HTMLInputElement>) => void;
   onFolderChange: (event: ChangeEvent<HTMLInputElement>) => void;
 };
@@ -14,6 +15,7 @@ type ImageUploadCardProps = {
 export function ImageUploadCard({
   mode,
   files,
+  fileError,
   onFileChange,
   onFolderChange,
 }: ImageUploadCardProps) {
@@ -22,6 +24,11 @@ export function ImageUploadCard({
       <h2 className="text-xl font-semibold mb-4">Select Images</h2>
       <FilePicker mode={mode} onChange={onFileChange} />
       {mode === "batch" && <FolderPicker onChange={onFolderChange} />}
+      {fileError && (
+        <p className="mt-2 text-sm text-red-600 dark:text-red-400">
+          {fileError}
+        </p>
+      )}
       <SelectedFilesList files={files} />
     </div>
   );
