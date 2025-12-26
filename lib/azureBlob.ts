@@ -125,3 +125,40 @@ export async function createUploadSasUrl({
 
   return { uploadUrl: `${blockBlob.url}?${sas}`, blobUrl: blockBlob.url };
 }
+
+export async function createReadSasUrl({
+  blobName,
+  expiresInMinutes = 5,
+}: {
+  blobName: string;
+  expiresInMinutes?: number;
+}) {
+  const conn = process.env.AZURE_STORAGE_CONNECTION_STRING!;
+  const containerName = process.env.AZURE_STORAGE_CONTAINER_NAME!;
+
+  const blobServiceClient = BlobServiceClient.fromConnectionString(conn, {
+    retryOptions: {
+      maxTries: 4,
+      tryTimeoutInMs: 30000,
+    },
+  });
+  const containerClient = blobServiceClient.getContainerClient(containerName);
+  await containerClient.createIfNotExists();
+
+  const blockBlob = containerClient.getBlockBlobClient(blobName);
+
+  const { accountName, accountKey } = getStorageAccountCredentials(conn);
+  const sharedKey = new StorageSharedKeyCredential(accountName, accountKey);
+
+  const sas = generateBlobSASQueryParameters(
+    {
+      containerName,
+      blobName,
+      permissions: BlobSASPermissions.parse("r"),
+      expiresOn: new Date(Date.now() + expiresInMinutes * 60 * 1000),
+    },
+    sharedKey
+  ).toString();
+
+  return { readUrl: `${blockBlob.url}?${sas}`, blobUrl: blockBlob.url };
+}

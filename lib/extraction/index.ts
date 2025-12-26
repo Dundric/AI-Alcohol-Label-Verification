@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import crypto from "crypto";
 import sharp from "sharp";
-import { uploadAndGetSasUrl } from "@/lib/azureBlob";
+import { createReadSasUrl, uploadAndGetSasUrl } from "@/lib/azureBlob";
 import { expectedAlcoholLabelSchema } from "@/lib/schemas";
 import type { ExpectedAlcoholLabel } from "@/lib/schemas";
 import { evaluateCandidates, runExtractionPasses } from "@/lib/extraction/engine";
@@ -169,6 +169,47 @@ async function compressAndUploadImage(
   }
 }
 
+/**
+ * Runs the shared extraction/evaluation pipeline once an image URL is available.
+ */
+async function extractFromImageUrl(
+  imageUrl: string,
+  expectedData: ExpectedAlcoholLabel | null,
+  config: OpenAIConfig,
+  logger: LoggerFns
+): Promise<ExtractLabelResult> {
+  // Initialize OpenAI client for extraction and evaluation calls.
+  const client = new OpenAI({
+    apiKey: config.apiKey,
+    baseURL: config.endpoint,
+  });
+
+  const extractionResult = await runExtractionPasses(
+    client,
+    config.deployment,
+    imageUrl,
+    logger
+  );
+  if (!extractionResult.ok) {
+    return extractionResult.error;
+  }
+
+  const evaluatedCandidates = await evaluateCandidates(
+    client,
+    config.deployment,
+    expectedData,
+    extractionResult.value
+  );
+
+  const bestCandidate = selectBestCandidate(evaluatedCandidates, expectedData);
+
+  return {
+    ok: true,
+    label: bestCandidate.extracted,
+    evaluation: bestCandidate.evaluation,
+  };
+}
+
 // Select the strongest candidate based on accuracy and completeness.
 /**
  * Selects the best candidate using accuracy, mismatches, and completeness.
@@ -220,36 +261,46 @@ export async function extractLabelFromFormData(
     return uploadResult.error;
   }
 
-  // Initialize OpenAI client for extraction and evaluation calls.
-  const client = new OpenAI({
-    apiKey: configResult.value.apiKey,
-    baseURL: configResult.value.endpoint,
-  });
-
-  const extractionResult = await runExtractionPasses(
-    client,
-    configResult.value.deployment,
+  return extractFromImageUrl(
     uploadResult.value.imageUrl,
+    expectedData,
+    configResult.value,
     logger
   );
-  if (!extractionResult.ok) {
-    return extractionResult.error;
+}
+
+/**
+ * Orchestrates extraction using an existing blob name already in storage.
+ * This keeps the API payload small while reusing the same extraction engine.
+ */
+export async function extractLabelFromBlobName(
+  blobName: string,
+  expectedData: ExpectedAlcoholLabel | null,
+  options: { logger?: Logger } = {}
+): Promise<ExtractLabelResult> {
+  const configResult = validateConfig();
+  if (!configResult.ok) {
+    return configResult.error;
   }
 
-  const evaluatedCandidates = await evaluateCandidates(
-    client,
-    configResult.value.deployment,
-    expectedData,
-    extractionResult.value
-  );
+  const logger = resolveLogger(options.logger);
 
-  const bestCandidate = selectBestCandidate(evaluatedCandidates, expectedData);
-
-  return {
-    ok: true,
-    label: bestCandidate.extracted,
-    evaluation: bestCandidate.evaluation,
-  };
+  try {
+    const { readUrl } = await createReadSasUrl({ blobName });
+    return extractFromImageUrl(
+      readUrl,
+      expectedData,
+      configResult.value,
+      logger
+    );
+  } catch (error) {
+    logger.error("[extract-label] failed to create read SAS", error);
+    return {
+      ok: false,
+      status: 502,
+      error: "Failed to create read URL for image",
+    };
+  }
 }
 
 export type { ExtractLabelError, ExtractLabelResult, ExtractLabelSuccess } from "@/lib/extraction/types";

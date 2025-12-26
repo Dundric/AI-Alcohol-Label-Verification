@@ -111,15 +111,48 @@ async function requestStructuredLabelData(
   imageFile: File,
   expectedData?: ExpectedAlcoholLabel
 ): Promise<ExtractLabelResponse> {
-  const formData = new FormData();
-  formData.append("image", imageFile);
-  if (expectedData) {
-    formData.append("expected", JSON.stringify(expectedData));
+  const uploadResponse = await fetch("/api/blob-upload", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      fileName: imageFile.name,
+      contentType: imageFile.type,
+    }),
+  });
+
+  if (!uploadResponse.ok) {
+    throw new Error("Failed to create upload URL");
+  }
+
+  const uploadPayload = (await uploadResponse.json()) as {
+    uploadUrl?: string;
+    blobName?: string;
+  };
+
+  if (!uploadPayload.uploadUrl || !uploadPayload.blobName) {
+    throw new Error("Invalid upload URL response");
+  }
+
+  const uploadResult = await fetch(uploadPayload.uploadUrl, {
+    method: "PUT",
+    headers: {
+      "x-ms-blob-type": "BlockBlob",
+      "Content-Type": imageFile.type || "application/octet-stream",
+    },
+    body: imageFile,
+  });
+
+  if (!uploadResult.ok) {
+    throw new Error("Failed to upload image to blob storage");
   }
 
   const response = await fetch("/api/extract-label", {
     method: "POST",
-    body: formData,
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      blobName: uploadPayload.blobName,
+      expected: expectedData ?? null,
+    }),
   });
 
   if (!response.ok) {
