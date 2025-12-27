@@ -1,131 +1,358 @@
 # AI Alcohol Label Verification
 
-A Next.js 14 prototype application for verifying alcohol label information using AI-powered OCR technology.
+An intelligent Next.js 14 application that uses Azure OpenAI to extract and verify alcohol label information against TTB (Alcohol and Tobacco Tax and Trade Bureau) compliance standards. The system supports both single-label verification and batch processing with CSV import.
+
+## Overview
+
+This application automates the verification of alcohol labels by:
+1. **Extracting** text and formatting from label images using Azure OpenAI's vision capabilities
+2. **Comparing** extracted data against expected/reference data
+3. **Evaluating** compliance across multiple fields with intelligent fuzzy matching
+4. **Reporting** detailed verification results with pass/warning/fail statuses
 
 ## Features
 
-- **Three Main Routes:**
-  - `/` - Instructions and system overview
-  - `/upload` - Single and batch image upload with expected data entry
-  - `/review` - Side-by-side comparison of extracted vs. expected data
+### 🔍 Comprehensive Field Validation
 
-- **Validated Fields:**
-  - Brand Name (fuzzy matching with normalization)
-  - Class/Type (product classification)
-  - ABV - Alcohol by Volume (numeric comparison with tolerance)
-  - Net Contents (volume with unit verification)
-  - Government Warning (exact match required for compliance)
+The system validates these critical label fields:
 
-- **Advanced Comparison:**
-  - Fuzzy brand matching using Levenshtein distance
-  - Normalization of capitalization and punctuation
-  - Status indicators: ✅ Pass / ⚠️ Warning / ❌ Fail
+- **Brand Name** - Fuzzy matching with normalization for punctuation and case variations
+- **Class/Type** - Product classification (e.g., Whiskey, Vodka, Wine, Beer)
+- **Alcohol Content (ABV)** - Numeric verification with tolerance ranges
+- **Net Contents** - Volume verification with unit standardization
+- **Government Warning** - Compliance check for required health statements with format validation (bold, all-caps)
+- **Bottler/Producer** - Full name and address verification
+- **Country of Origin** - Required for imported products
+- **Additives Disclosure** - Detection of sulfites, aspartame, FD&C Yellow No. 5, cochineal extract, and carmine
 
-- **User Experience:**
-  - Accessible UI with ARIA attributes
-  - Progress indicators for batch processing
-  - Responsive design with Tailwind CSS
-  - Dark mode support
+### 📊 Processing Modes
+
+1. **Single Label Verification**
+   - Upload one image and manually enter expected data
+   - Ideal for real-time label evaluation and testing
+   - Immediate detailed results
+
+2. **Batch Processing**
+   - Upload multiple images with a CSV/Excel file containing expected data
+   - Automated matching by filename
+   - Parallel processing for efficiency (configurable concurrency)
+   - Bulk status dashboard
+
+### 🎯 Intelligent Evaluation
+
+- **Multi-pass extraction** - Runs two parallel extraction attempts to reduce AI variance
+- **Smart merging** - Automatically selects best results from multiple extraction attempts
+- **Fuzzy matching** - Uses Levenshtein distance for brand and class comparisons
+- **Heuristic overrides** - Additional validation rules for edge cases
+- **Detailed scoring** - Field-by-field accuracy assessment
+
+### 💡 User Experience
+
+- Clean, accessible UI with ARIA attributes
+- Real-time progress indicators for batch processing
+- Responsive design with Tailwind CSS
+- Dark mode support
+- Side-by-side comparison view
+- Status indicators: ✅ Pass / ⚠️ Warning / ❌ Fail
 
 ## Technology Stack
 
-- **Next.js 14** with App Router
-- **TypeScript** for type safety
-- **Tailwind CSS** for styling
-- **Zod** for schema validation
-- **Mocked OCR** for fast extraction (demo purposes)
+- **Next.js 14** - React framework with App Router
+- **TypeScript** - Type-safe development
+- **Azure OpenAI** - Vision and language models for extraction and evaluation
+- **Azure Blob Storage** - Optional cloud storage for images (can work without)
+- **Tailwind CSS** - Utility-first styling
+- **Zod** - Runtime schema validation
+- **Sharp** - Image processing and optimization
 
-## Getting Started
+## Prerequisites
 
-### Prerequisites
+- **Node.js 18+** installed ([Download](https://nodejs.org/))
+- **npm** or **yarn** package manager
+- **Azure OpenAI Service** with a vision-capable deployment (e.g., GPT-4o, GPT-4 Turbo with Vision)
+- **Azure Blob Storage** (optional, for cloud storage features)
 
-- Node.js 18+ installed
-- npm or yarn package manager
+## Setup Instructions
 
-### Installation
+### 1. Clone the Repository
 
-1. Clone the repository:
 ```bash
 git clone https://github.com/Dundric/AI-Alcohol-Label-Verification.git
 cd AI-Alcohol-Label-Verification
 ```
 
-2. Install dependencies:
+### 2. Install Dependencies
+
 ```bash
 npm install
 ```
 
-3. Run the development server:
+### 3. Configure Environment Variables
+
+Create a `.env.local` file in the root directory with the following required variables:
+
+```bash
+# Azure OpenAI Configuration (REQUIRED)
+AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
+AZURE_OPENAI_API_KEY=your-api-key-here
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name
+
+# Azure Blob Storage (OPTIONAL - for cloud image storage)
+AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...
+AZURE_STORAGE_CONTAINER_NAME=your-container-name
+
+# Azure Function (OPTIONAL - for external processing)
+AZURE_FUNCTION_VERIFY_IMAGE_URL=https://your-function-app.azurewebsites.net/api/verify-image
+```
+
+#### How to Get Azure OpenAI Credentials:
+
+1. Go to [Azure Portal](https://portal.azure.com/)
+2. Create or select an **Azure OpenAI** resource
+3. Navigate to **Keys and Endpoint** section
+4. Copy the **Endpoint** and one of the **Keys**
+5. Go to **Model deployments** and note your **deployment name** (e.g., "gpt-4o")
+
+#### Azure Blob Storage Setup (Optional):
+
+Only needed if you want to use cloud storage features. The application can work without this by processing images locally.
+
+1. Create an Azure Storage Account
+2. Create a Blob container
+3. Copy the connection string from **Access keys**
+
+### 4. Run Development Server
+
 ```bash
 npm run dev
 ```
 
-4. Open [http://localhost:3000](http://localhost:3000) in your browser.
+The application will start at [http://localhost:3000](http://localhost:3000)
 
-## Usage
+### 5. Run Production Build
 
-1. **Read Instructions:** Start at the home page to understand how the system works
-2. **Upload Images:** Navigate to `/upload` and:
-   - Select single or batch mode
-   - Upload image(s) of alcohol labels
-   - Enter expected label data for comparison
-   - Click "Process & Verify Labels"
-3. **Review Results:** View detailed comparison results at `/review`:
-   - See summary statistics
-   - Select different images (in batch mode)
-   - Compare side-by-side expected vs. extracted data
-   - View field-by-field verification status
+```bash
+# Build the application
+npm run build
+
+# Start production server
+npm start
+```
+
+## Usage Guide
+
+### Single Label Verification
+
+1. **Navigate** to the home page at `http://localhost:3000`
+2. Click **"Start Uploading →"** or go to `/upload`
+3. Ensure **"Single"** mode is selected
+4. **Upload** your label image (JPEG, PNG, or WebP)
+   - Note: Combine front, back, and side panels into one image if needed
+5. **Fill in the Expected Data form** with the reference information
+6. Click **"Process & Verify Labels"**
+7. **Review Results** on the `/review` page with detailed field comparisons
+
+### Batch Processing with CSV
+
+1. Go to `/upload` and select **"Batch"** mode
+2. **Upload Images:**
+   - Click "Choose Images" and select multiple files, OR
+   - Click "Choose Folder" to upload an entire directory (Chrome/Edge only)
+3. **Upload CSV/Excel File:**
+   - Use the provided template format (download from home page)
+   - **Important:** The `image_name` column must exactly match your image filenames
+   - Example CSV columns:
+     ```
+     image_name,brand_name,class_type,alcohol_content,net_contents,bottler_producer,...
+     ```
+4. Click **"Process & Verify Labels"**
+5. View bulk results dashboard with pass/fail/warning counts
+6. Click individual images to see detailed comparisons
+
+### CSV File Format
+
+Your CSV must include these columns (see `/Table-Example.csv` for reference):
+
+- `image_name` - Filename (e.g., "Fireball.jpg")
+- `brand_name` - Brand name (e.g., "Fireball")
+- `class_type` - Product type (e.g., "Cinnamon Whisky")
+- `alcohol_content` - ABV percentage (e.g., "33%")
+- `net_contents` - Volume (e.g., "100 ML")
+- `bottler_producer` - Full name and address
+- `product_type` - Product category (beer/wine/whiskey/rum/other_spirits)
+- `country_of_origin` - Origin country (if imported)
+- `age_years` - Age statement (if applicable)
+- `is_imported` - TRUE/FALSE
+- `beer_has_added_flavors_with_alcohol` - TRUE/FALSE
+- `additive_*` columns - TRUE/FALSE for various additives
 
 ## Project Structure
 
 ```
 /app
-  /upload          # Upload page with form
-  /review          # Review page with comparison
-  layout.tsx       # Root layout with navigation
-  page.tsx         # Home page with instructions
-  globals.css      # Global styles
+  /api
+    /extract-label       # API endpoint for label extraction
+      route.ts           # Next.js API route handler
+  /upload                # Upload page with forms and logic
+    page.tsx             # Main upload page component
+    /components          # Upload UI components
+    /hooks               # Custom React hooks
+  /review                # Review/results page
+    page.tsx             # Results comparison view
+  layout.tsx             # Root layout with navigation
+  page.tsx               # Home page with instructions
+  globals.css            # Global styles and Tailwind imports
+
 /lib
-  schemas.ts       # Zod schemas for validation
-  ocr.ts           # Mocked OCR extraction
-  compare.ts       # Comparison and verification logic
+  /extraction            # Core extraction engine
+    engine.ts            # Multi-pass extraction and evaluation
+    prompts.ts           # AI prompts for extraction
+    image-service.ts     # Image processing and encoding
+    merger.ts            # Candidate result merging logic
+    heuristics.ts        # Validation rules and overrides
+    types.ts             # TypeScript type definitions
+    utils.ts             # Helper functions
+  schemas.ts             # Zod validation schemas
+  compare.ts             # Comparison logic and fuzzy matching
+  textSimilarity.ts      # String similarity algorithms
+  azureBlob.ts           # Azure Blob Storage utilities (optional)
+  ocr.ts                 # Client-side OCR interface
+
+/public
+  Fireball.jpg           # Example label image
+  Table-Example.csv      # Example CSV template
 ```
-
-## Mock OCR Data
-
-The system includes pre-configured mock data for common alcohol types:
-- Whiskey (Jack Daniel's)
-- Wine (Chateau Margaux)
-- Beer (Budweiser)
-- Vodka (Grey Goose)
-- Rum (Captain Morgan)
-
-The mock selects data based on the filename. For production use, integrate with a real OCR service.
 
 ## Validation Rules
 
-- **Brand:** 85%+ similarity = ✅, 60-85% = ⚠️, <60% = ❌
-- **Class/Type:** 85%+ similarity = ✅, 60-85% = ⚠️, <60% = ❌
-- **ABV:** <0.1% difference = ✅, <1% = ⚠️, >1% = ❌
-- **Net Contents:** Exact unit match + <5% difference = ✅
-- **Government Warning:** Exact match (normalized) = ✅, 95%+ = ⚠️, <95% = ❌
+The system uses sophisticated validation with configurable thresholds:
 
-## Build for Production
+| Field | Pass (✅) | Warning (⚠️) | Fail (❌) |
+|-------|----------|-------------|----------|
+| **Brand Name** | 85%+ similarity | 60-85% similarity | <60% similarity |
+| **Class/Type** | 85%+ similarity | 60-85% similarity | <60% similarity |
+| **ABV** | <0.1% difference | 0.1-1% difference | >1% difference |
+| **Net Contents** | Exact volume + unit | <5% volume difference | >5% difference or wrong unit |
+| **Government Warning** | Exact match + correct format | 95%+ similarity | <95% similarity or format issues |
+| **Bottler/Producer** | High similarity | Moderate similarity | Low similarity |
+| **Country of Origin** | Exact match | Close match | Mismatch |
+| **Additives** | All detected correctly | Partial match | Missing disclosures |
+
+## Troubleshooting
+
+### "Missing Azure OpenAI configuration" Error
+
+- Ensure `.env.local` exists with all three Azure OpenAI variables
+- Restart the dev server after adding environment variables
+- Verify your endpoint URL format: `https://YOUR-RESOURCE.openai.azure.com`
+
+### Images Not Processing
+
+- Check that your Azure OpenAI deployment supports vision (GPT-4o or GPT-4 Turbo with Vision)
+- Verify API key has proper permissions
+- Check image file size (should be reasonable, < 10MB recommended)
+- Ensure image format is JPEG, PNG, or WebP
+
+### CSV Upload Issues
+
+- Verify the `image_name` column exactly matches your filenames (including extensions)
+- Check CSV encoding (UTF-8 recommended)
+- Ensure all required columns are present
+- Use boolean values: TRUE/FALSE (case-insensitive)
+
+### Slow Batch Processing
+
+- Azure OpenAI API has rate limits - adjust `CSV_PARALLEL_LIMIT` in `/lib/upload/constants.ts`
+- Default is 2 concurrent requests to avoid rate limiting
+- Large batches will take time due to AI processing
+
+## Deployment
+
+### Deploy to Azure Static Web Apps
+
+This repository includes a GitHub Actions workflow for Azure deployment:
+
+1. Create an Azure Static Web App
+2. Configure the GitHub integration
+3. Set environment variables in Azure portal under Configuration
+4. Push to your repository - automatic deployment via GitHub Actions
+
+### Deploy to Vercel
 
 ```bash
-npm run build
-npm start
+# Install Vercel CLI
+npm install -g vercel
+
+# Deploy
+vercel
+
+# Add environment variables in Vercel dashboard
 ```
+
+## Development
+
+### Running Tests
+
+Currently no automated tests are included. Manual testing is recommended for:
+- Single image processing
+- Batch CSV processing
+- Various image formats and sizes
+- Edge cases in field matching
+
+### Adding New Validation Fields
+
+1. Update schemas in `/lib/schemas.ts`
+2. Modify extraction prompts in `/lib/extraction/prompts.ts`
+3. Add comparison logic in `/lib/compare.ts`
+4. Update UI forms in `/app/upload/components/`
+
+## Security Considerations
+
+- Never commit `.env.local` to version control
+- Rotate API keys regularly
+- Use Azure RBAC for fine-grained access control
+- Implement rate limiting for production deployments
+- Sanitize user inputs (application uses Zod validation)
+- Consider adding authentication for production use
+
+## Performance Tips
+
+- Images are automatically compressed and optimized
+- Batch processing uses configurable parallelism to respect rate limits
+- Azure OpenAI responses are streamed when possible
+- Consider caching results for repeated verifications
+
+## Future Enhancements
+
+This is an actively developed application. Potential improvements:
+
+- [ ] Add database persistence for verification history
+- [ ] Implement user authentication and multi-tenancy
+- [ ] Export results to PDF reports
+- [ ] Add custom validation rule configuration
+- [ ] Support for additional languages
+- [ ] Training mode to improve extraction accuracy
+- [ ] Integration with TTB COLA APIs
+- [ ] Automated image quality checking
+- [ ] Support for video label extraction
 
 ## Contributing
 
-This is a prototype application. For production use, consider:
-- Integrating with real OCR services (Google Vision, AWS Textract, Azure Computer Vision)
-- Adding authentication and user management
-- Implementing persistent storage for results
-- Adding more sophisticated image preprocessing
-- Expanding validation rules and customization options
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Make your changes with clear commit messages
+4. Test thoroughly
+5. Submit a pull request
 
 ## License
 
 ISC
+
+## Support
+
+For issues, questions, or contributions:
+- Open an issue on [GitHub](https://github.com/Dundric/AI-Alcohol-Label-Verification/issues)
+- Review the troubleshooting section above
+- Check Azure OpenAI documentation for API-related questions
