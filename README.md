@@ -162,9 +162,13 @@ npm start
    - Use the provided template format (download from home page)
    - **Important:** The `image_name` column must exactly match your image filenames
    - Example CSV columns:
-     ```
-     image_name,brand_name,class_type,alcohol_content,net_contents,bottler_producer,...
-     ```
+      ```
+      image_name,brand_name,class_type,alcohol_content,net_contents,bottler_producer,
+      product_type,country_of_origin,age_years,is_imported,
+      beer_has_added_flavors_with_alcohol,additive_fdc_yellow_no_5,
+      additive_cochineal_extract,additive_carmine,additive_aspartame,
+      additive_sulfites_ge_10ppm
+      ```
 4. Click **"Process & Verify Labels"**
 5. View bulk results dashboard with pass/fail/warning counts
 6. Click individual images to see detailed comparisons
@@ -304,7 +308,7 @@ Currently no automated tests are included. Manual testing is recommended for:
 1. Update schemas in `/lib/schemas.ts`
 2. Modify extraction prompts in `/lib/extraction/prompts.ts`
 3. Add comparison logic in `/lib/compare.ts`
-4. Update UI forms in `/app/upload/components/`
+4. Update UI forms in `/app/upload/components`
 
 ## Security Considerations
 
