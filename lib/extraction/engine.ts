@@ -9,9 +9,9 @@ import type {
   FieldAccuracy,
 } from "@/lib/schemas";
 import {
-  shouldCheckAdditives,
-  shouldCheckAlcoholContent,
-  shouldCheckCountryOfOrigin,
+  applyEvaluationOverrides,
+  buildDecision,
+  getEvaluationFlags,
 } from "@/lib/extraction/heuristics";
 import {
   evaluationInstructions,
@@ -20,34 +20,8 @@ import {
 } from "@/lib/extraction/prompts";
 import type { ExtractionCandidate, LoggerFns, StepResult } from "@/lib/extraction/types";
 
-// Determine which optional fields should be included in evaluation.
-/**
- * Computes which optional fields should be included when evaluating accuracy.
- */
-function getEvaluationFlags(expected: ExpectedAlcoholLabel) {
-  return {
-    includeAlcohol: shouldCheckAlcoholContent(expected),
-    includeCountry: shouldCheckCountryOfOrigin(expected),
-    includeAdditives: shouldCheckAdditives(expected),
-  };
-}
 
-function applyEvaluationOverrides(
-  fields: FieldAccuracy,
-  flags: ReturnType<typeof getEvaluationFlags>
-): FieldAccuracy {
-  return {
-    ...fields,
-    alcoholContent: flags.includeAlcohol ? fields.alcoholContent : 1,
-    countryOfOrigin: flags.includeCountry ? fields.countryOfOrigin : 1,
-    additivesDisclosed: flags.includeAdditives ? fields.additivesDisclosed : 1,
-  };
-}
-
-function buildDecision(fields: FieldAccuracy): AccuracyDecision {
-  const passed = Object.values(fields).every((value) => value === 1);
-  return { fields, passed };
-}
+//This files extracts the alochol label from the image using Azure OpenAI. We run two extraction passes in parallel to reduce variance. We then evaluate each extraction against expected data and return the evaluation results as an array of candidates.
 
 // Run a single extraction pass and return the parsed label, if any.
 /**
@@ -141,7 +115,8 @@ export async function runExtractionPasses(
   logger.log("[extract-label] running parallel extractions");
   const extractionResults = await Promise.all([
     runExtractionPass(client, deployment, imageUrl, logger.log, 1),
-    runExtractionPass(client, deployment, imageUrl, logger.log, 2)
+    runExtractionPass(client, deployment, imageUrl, logger.log, 2),
+    runExtractionPass(client, deployment, imageUrl, logger.log, 3)
   ]);
 
   // Filter out any responses that failed schema parsing.
@@ -165,10 +140,16 @@ export async function runExtractionPasses(
 
 // Evaluate a single extraction against expected data.
 /**
- * Evaluates one extraction against expected label data and returns accuracy info.
+ * The evaluation chooses which fields to compare based on the expected data provided. 
+ * For instance, if a bottle of wine is imported we make sure to check the countryOfOrigin field, 
+ * but if it's domestic we skip that field.
+ * We evaluate one extraction against expected label data and return an evaluation object.  
+ * If the value extracted from a label for a specific field is considered valid, it gets a score of 1; otherwise, 0.
+ * We then return the object of field accuracies for all fields.
+ * 
  */
 export async function runEvaluationPass(
-  client: OpenAI,
+  client: OpenAI, 
   deployment: string,
   expectedData: ExpectedAlcoholLabel,
   extracted: ExtractedAlcoholLabel
@@ -236,7 +217,7 @@ export async function runEvaluationPass(
 
 // Evaluate each candidate when expected data exists.
 /**
- * Runs evaluation for each candidate when expected data is provided.
+ * Runs evaluation for each candidate in parallel when expected data is provided.
  */
 export async function evaluateCandidates(
   client: OpenAI,

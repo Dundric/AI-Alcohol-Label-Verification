@@ -8,17 +8,7 @@ import {
   SimpleField,
   VerificationResult,
 } from "./schemas";
-
-/**
- * Normalize text for comparison by converting to lowercase and removing punctuation
- */
-function normalizeText(text: string): string {
-  return text
-    .toLowerCase()
-    .replace(/[^\w\s]/g, "")
-    .replace(/\s+/g, " ")
-    .trim();
-}
+import { normalizeForSimilarity, similarityRatio } from "./textSimilarity";
 
 function normalizeWhitespace(text: string): string {
   return text.replace(/\s+/g, " ").trim();
@@ -32,46 +22,6 @@ const STANDARD_GOV_WARNINGS = [
   "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
   "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
 ].map(normalizeGovWarning);
-
-/**
- * Calculate Levenshtein distance between two strings for fuzzy matching
- */
-function levenshteinDistance(str1: string, str2: string): number {
-  const len1 = str1.length;
-  const len2 = str2.length;
-  const matrix: number[][] = [];
-
-  for (let i = 0; i <= len1; i++) {
-    matrix[i] = [i];
-  }
-
-  for (let j = 0; j <= len2; j++) {
-    matrix[0][j] = j;
-  }
-
-  for (let i = 1; i <= len1; i++) {
-    for (let j = 1; j <= len2; j++) {
-      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
-      matrix[i][j] = Math.min(
-        matrix[i - 1][j] + 1, // deletion
-        matrix[i][j - 1] + 1, // insertion
-        matrix[i - 1][j - 1] + cost // substitution
-      );
-    }
-  }
-
-  return matrix[len1][len2];
-}
-
-/**
- * Calculate similarity ratio between two strings (0-1)
- */
-function similarityRatio(str1: string, str2: string): number {
-  const distance = levenshteinDistance(str1, str2);
-  const maxLength = Math.max(str1.length, str2.length);
-  if (maxLength === 0) return 1;
-  return 1 - distance / maxLength;
-}
 
 const BEER_CLASS_KEYWORDS = [
   "beer",
@@ -182,8 +132,8 @@ function compareBrand(
   expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
+  const normalizedExtracted = normalizeForSimilarity(extractedText);
+  const normalizedExpected = normalizeForSimilarity(expected.text);
   const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
 
   let status: "✅" | "⚠️" | "❌";
@@ -217,8 +167,8 @@ function compareClassType(
   expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
+  const normalizedExtracted = normalizeForSimilarity(extractedText);
+  const normalizedExpected = normalizeForSimilarity(expected.text);
   const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
 
   let status: "✅" | "⚠️" | "❌";
@@ -412,8 +362,8 @@ function compareBottlerProducer(
   expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
+  const normalizedExtracted = normalizeForSimilarity(extractedText);
+  const normalizedExpected = normalizeForSimilarity(expected.text);
   const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
 
   let status: "✅" | "⚠️" | "❌";
@@ -444,8 +394,8 @@ function compareCountryOfOrigin(
   expected: SimpleField
 ): VerificationResult {
   const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
+  const normalizedExtracted = normalizeForSimilarity(extractedText);
+  const normalizedExpected = normalizeForSimilarity(expected.text);
   const cleanedExtracted = normalizedExtracted
     .replace(/\b(produced in|made in|product of|imported from|origin)\b/g, "")
     .replace(/\s+/g, " ")
@@ -526,9 +476,17 @@ export function compareLabels(
     compareBrand(extracted.brandName, expected.brandName),
     compareClassType(extracted.classType, expected.classType),
     compareNetContents(extracted.netContents, expected.netContents),
-    compareGovernmentWarning(extracted.governmentWarning, expected.governmentWarning),
     compareBottlerProducer(extracted.bottlerProducer, expected.bottlerProducer),
   ];
+
+  if (expected.governmentWarning) {
+    results.push(
+      compareGovernmentWarning(
+        extracted.governmentWarning,
+        expected.governmentWarning
+      )
+    );
+  }
 
   if (expected.alcoholContent) {
     results.push(

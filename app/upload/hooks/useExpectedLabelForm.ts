@@ -18,7 +18,6 @@ type FlagFieldKey = "isImported" | "beerHasAddedFlavorsWithAlcohol";
 export type ExpectedDataHandlers = {
   updateRequiredField: (field: RequiredFieldKey, value: string) => void;
   updateAlcoholContent: (value: string) => void;
-  updateGovernmentWarning: (value: string) => void;
   updateOptionalField: (field: OptionalFieldKey, value: string) => void;
   updateFlag: (field: FlagFieldKey, value: boolean) => void;
   updateAgeYears: (value: string) => void;
@@ -47,12 +46,6 @@ export function useExpectedLabelForm(
       setExpectedData((prev) => ({
         ...prev,
         alcoholContent: trimmed.length === 0 ? null : buildSimpleField(value),
-      }));
-    },
-    updateGovernmentWarning: (value) => {
-      setExpectedData((prev) => ({
-        ...prev,
-        governmentWarning: { ...prev.governmentWarning, text: value },
       }));
     },
     updateOptionalField: (field, value) => {

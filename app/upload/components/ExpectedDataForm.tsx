@@ -173,23 +173,8 @@ export function ExpectedDataForm({ expectedData, handlers }: ExpectedDataFormPro
             ))}
           </div>
         </div>
-        <div>
-          <label
-            htmlFor="governmentWarning"
-            className="block font-semibold mb-1"
-          >
-            Government Warning
-          </label>
-          <textarea
-            id="governmentWarning"
-            value={expectedData.governmentWarning.text}
-            onChange={(event) =>
-              handlers.updateGovernmentWarning(event.target.value)
-            }
-            rows={4}
-            className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-            aria-label="Expected government warning text"
-          />
+        <div className="text-sm text-gray-600 dark:text-gray-300">
+          Government warning is always assumed to be the standard text.
         </div>
       </div>
     </div>

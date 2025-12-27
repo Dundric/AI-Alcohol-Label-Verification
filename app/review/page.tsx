@@ -252,7 +252,7 @@ export default function ReviewPage() {
                 Government Warning
               </dt>
               <dd className="mt-1 text-xs break-words">
-                {currentVerification.expectedData.governmentWarning.text}
+                {currentVerification.expectedData.governmentWarning?.text ?? "Not provided"}
               </dd>
             </div>
           </dl>

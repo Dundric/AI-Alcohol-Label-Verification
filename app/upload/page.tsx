@@ -211,12 +211,14 @@ export default function UploadPage() {
         onFolderChange={handleFolderChange}
       />
 
+      {mode === "batch" && (
+
       <CsvUploadCard
         csvError={csvError}
         csvExpectedMap={csvExpectedMap}
         onChange={handleCsvChange}
-      />
-
+      />     
+      )}
       {mode === "single" && (
         <ExpectedDataForm expectedData={expectedData} handlers={expectedHandlers} />
       )}

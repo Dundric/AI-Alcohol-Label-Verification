@@ -98,9 +98,7 @@ function buildExpectedFromRow(
         ? buildSimpleField(row.alcohol_content)
         : null,
       netContents: buildSimpleField(row.net_contents ?? ""),
-      governmentWarning: buildGovernmentWarningField(
-        row.government_warning?.trim() || STANDARD_GOV_WARNING_LONG
-      ),
+      governmentWarning: buildGovernmentWarningField(STANDARD_GOV_WARNING_LONG),
       bottlerProducer: buildSimpleField(row.bottler_producer ?? ""),
       countryOfOrigin: row.country_of_origin
         ? buildSimpleField(row.country_of_origin)

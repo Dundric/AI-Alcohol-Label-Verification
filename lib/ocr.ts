@@ -41,10 +41,10 @@ function emptyAdditives(): AdditiveDisclosure {
 // Simulated OCR data for different alcohol types
 const mockOCRData: Record<string, ExtractedAlcoholLabel> = {
   whiskey: {
-    brandName: makeSimpleField("Jack Daniel's"),
-    classType: makeSimpleField("Tennessee Whiskey"),
-    alcoholContent: makeSimpleField("40%"),
-    netContents: makeSimpleField("750ml"),
+    brandName: makeSimpleField("Fireball"),
+    classType: makeSimpleField("Cinnamon Whisky"),
+    alcoholContent: makeSimpleField("ALC. 33% BY VOL."),
+    netContents: makeSimpleField("100ML"),
     governmentWarning: makeGovernmentWarningField(
       "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
       { isBold: true, isAllCaps: true }

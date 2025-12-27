@@ -33,12 +33,12 @@ export function buildGovernmentWarningField(
 export function getDefaultExpectedData(): ExpectedAlcoholLabel {
   return {
     productType: null,
-    brandName: buildSimpleField("Jack Daniel's"),
-    classType: buildSimpleField("Tennessee Whiskey"),
-    alcoholContent: buildSimpleField("40%"),
-    netContents: buildSimpleField("750ml"),
+    brandName: buildSimpleField("FIREBALL"),
+    classType: buildSimpleField("CINNAMON WHISKY"),
+    alcoholContent: buildSimpleField("ALC. 33% BY VOL."),
+    netContents: buildSimpleField("100ML"),
     governmentWarning: buildGovernmentWarningField(STANDARD_GOV_WARNING_LONG),
-    bottlerProducer: buildSimpleField("Jack Daniel's Distillery"),
+    bottlerProducer: buildSimpleField("PRODUCED AND BOTTLED BY SAZERAC CO., FRANKFORT, KY"),
     countryOfOrigin: null,
     ageYears: null,
     isImported: false,
@@ -52,11 +52,7 @@ export function normalizeExpectedData(
 ): ExpectedAlcoholLabel {
   return {
     ...expectedData,
-    governmentWarning: {
-      ...expectedData.governmentWarning,
-      isBold: true,
-      isAllCaps: true,
-    },
+    governmentWarning: buildGovernmentWarningField(STANDARD_GOV_WARNING_LONG),
   };
 }
 

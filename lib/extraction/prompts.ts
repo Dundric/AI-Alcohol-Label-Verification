@@ -15,7 +15,7 @@ export const extractionPrompt =
   "  - Do NOT use fanciful names, proprietary names, or flavor names as classType.\n" +
   "  - Example: If label says 'Blue Ridge Moonlight' (Fanciful) and 'White Wine' (Class), classType is 'White Wine'.\n" +
   "- alcoholContent: the ABV as printed (e.g. \"13.5% ALC./VOL.\" or \"4% ABV\" )\n" +
-  "  - If the label is beer/malt liquor, return null for alcoholContent.\n" +
+  "  - If the label is beer/malt liquor, ABV might not be included.\n" +
   "  - If the label is a wine under 7% ABV, return null for alcoholContent.\n" +
   "- netContents: net contents in milliliters (e.g. \"750 ML\")\n" +
   "- bottlerProducer: full bottler/producer name AND address as printed usually prefixed by certain works like 'Imported by', 'Bottled by', 'Distilled by' 'Distributed by' 'Produced by' \n" +

@@ -47,12 +47,6 @@ const BEER_CLASS_KEYWORDS = [
   "black and tan",
 ];
 
-function isBeerClassType(value?: string | null): boolean {
-  if (!value) return false;
-  const normalized = value.toLowerCase();
-  return BEER_CLASS_KEYWORDS.some((keyword) => normalized.includes(keyword));
-}
-
 // Schema for extracted alcohol label data (nullable for missing fields)
 export const extractedAlcoholLabelSchema = z.object({
   brandName: nullableSimpleFieldSchema,
