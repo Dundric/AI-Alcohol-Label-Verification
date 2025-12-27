@@ -1,5 +1,8 @@
 import { NextResponse } from "next/server";
-import { extractLabelFromBlobName, extractLabelFromFormData } from "@/lib/extraction";
+import {
+  extractLabelFromFormData,
+  extractLabelFromImageDataUrl,
+} from "@/lib/extraction";
 import { expectedAlcoholLabelSchema } from "@/lib/schemas";
 
 export const runtime = "nodejs";
@@ -21,14 +24,15 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
       }
       const body = (payload ?? {}) as {
-        blobName?: unknown;
+        imageDataUrl?: unknown;
         expected?: unknown;
         imageName?: unknown;
       };
-      const blobName = typeof body.blobName === "string" ? body.blobName : null;
-      if (!blobName) {
+      const imageDataUrl =
+        typeof body.imageDataUrl === "string" ? body.imageDataUrl : null;
+      if (!imageDataUrl) {
         return NextResponse.json(
-          { error: "blobName is required" },
+          { error: "imageDataUrl is required" },
           { status: 400 }
         );
       }
@@ -37,7 +41,7 @@ export async function POST(request: Request) {
       const expected = expectedParsed.success ? expectedParsed.data : null;
       const imageName = typeof body.imageName === "string" ? body.imageName : undefined;
 
-      const result = await extractLabelFromBlobName(blobName, expected, {
+      const result = await extractLabelFromImageDataUrl(imageDataUrl, expected, {
         logger: console,
         imageName,
       });

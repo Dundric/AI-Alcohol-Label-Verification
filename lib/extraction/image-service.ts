@@ -1,17 +1,15 @@
-import crypto from "crypto";
 import sharp from "sharp";
-import { uploadAndGetSasUrl } from "@/lib/azureBlob";
 import type { LoggerFns, StepResult } from "@/lib/extraction/types";
 
 // Fallback when a file has no MIME type.
 const DEFAULT_MIME_TYPE = "image/jpeg";
 
-// Compress the image (best effort) and upload to blob storage.
+// Compress the image (best effort) and encode it for model ingestion.
 /**
- * Compresses the image when possible, uploads to blob storage,
- * and returns a SAS URL for model ingestion.
+ * Compresses the image when possible and returns a data URL
+ * that can be sent directly to the model.
  */
-export async function compressAndUploadImage(
+export async function compressAndEncodeImage(
   buffer: Buffer,
   mimeType: string,
   logger: LoggerFns
@@ -39,22 +37,8 @@ export async function compressAndUploadImage(
     logger.log("[extract-label] image bytes:", buffer.length);
   }
 
-  const blobName = `labels/${crypto.randomUUID()}.jpg`;
-
-  // Upload to blob storage so the model can fetch the image via SAS URL.
-  try {
-    const imageUrl = await uploadAndGetSasUrl({
-      buffer: uploadBuffer,
-      contentType: uploadContentType,
-      blobName,
-    });
-    logger.log("[extract-label] SAS URL created");
-    return { ok: true, value: { imageUrl } };
-  } catch (uploadError) {
-    logger.error("[extract-label] blob upload failed", uploadError);
-    return {
-      ok: false,
-      error: { ok: false, status: 502, error: "Failed to upload image to storage" },
-    };
-  }
+  const imageUrl = `data:${uploadContentType};base64,${uploadBuffer.toString(
+    "base64"
+  )}`;
+  return { ok: true, value: { imageUrl } };
 }
