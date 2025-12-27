@@ -90,21 +90,24 @@ export type ProductType = z.infer<typeof productTypeSchema>;
 export type ExtractedAlcoholLabel = z.infer<typeof extractedAlcoholLabelSchema>;
 export type ExpectedAlcoholLabel = z.infer<typeof expectedAlcoholLabelSchema>;
 
+const fieldScoreSchema = z.union([z.literal(0), z.literal(1)]);
+
+export const fieldAccuracySchema = z.object({
+  brandName: fieldScoreSchema,
+  classType: fieldScoreSchema,
+  alcoholContent: fieldScoreSchema,
+  netContents: fieldScoreSchema,
+  governmentWarning: fieldScoreSchema,
+  bottlerProducer: fieldScoreSchema,
+  countryOfOrigin: fieldScoreSchema,
+  additivesDisclosed: fieldScoreSchema,
+});
+
+export type FieldAccuracy = z.infer<typeof fieldAccuracySchema>;
+
 export const accuracyDecisionSchema = z.object({
-  accurate: z.boolean(),
-  notes: z.string(),
-  mismatchedFields: z.array(
-    z.enum([
-      "brandName",
-      "classType",
-      "alcoholContent",
-      "netContents",
-      "governmentWarning",
-      "bottlerProducer",
-      "countryOfOrigin",
-      "additivesDisclosed",
-    ])
-  ),
+  fields: fieldAccuracySchema,
+  passed: z.boolean(),
 });
 
 export type AccuracyDecision = z.infer<typeof accuracyDecisionSchema>;

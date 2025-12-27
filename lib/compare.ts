@@ -29,7 +29,7 @@ function normalizeGovWarning(text: string): string {
 }
 
 const STANDARD_GOV_WARNINGS = [
-  "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES.",
+  "GOVERNMENT WARNING: (1) ACCORDING TO THE SURGEON GENERAL, WOMEN SHOULD NOT DRINK ALCOHOLIC BEVERAGES DURING PREGNANCY BECAUSE OF THE RISK OF BIRTH DEFECTS. (2) CONSUMPTION OF ALCOHOLIC BEVERAGES IMPAIRS YOUR ABILITY TO DRIVE A CAR OR OPERATE MACHINERY, AND MAY CAUSE HEALTH PROBLEMS.",
   "GOVERNMENT WARNING: (1) According to the Surgeon General, women should not drink alcoholic beverages during pregnancy because of the risk of birth defects. (2) Consumption of alcoholic beverages impairs your ability to drive a car or operate machinery, and may cause health problems.",
 ].map(normalizeGovWarning);
 
@@ -171,57 +171,6 @@ function deriveProductTypeFromClassType(
   }
 
   return null;
-}
-
-function resolveProductType(
-  extracted: ExtractedAlcoholLabel,
-  expected: ExpectedAlcoholLabel
-): ProductType | null {
-  return (
-    expected.productType ??
-    deriveProductTypeFromClassType(expected.classType?.text) ??
-    deriveProductTypeFromClassType(extracted.classType?.text)
-  );
-}
-
-function parseAbv(text?: string | null): number | null {
-  if (!text) return null;
-  const match = text.match(/(\d+(\.\d+)?)/);
-  if (!match) return null;
-  return Number.parseFloat(match[1]);
-}
-
-function compareOptionalField(
-  label: string,
-  extracted: SimpleField | null,
-  expected: SimpleField
-): VerificationResult {
-  const extractedText = extracted?.text ?? "";
-  const normalizedExtracted = normalizeText(extractedText);
-  const normalizedExpected = normalizeText(expected.text);
-  const similarity = similarityRatio(normalizedExtracted, normalizedExpected);
-
-  let status: "✅" | "⚠️" | "❌";
-  let message: string;
-
-  if (similarity > 0.9) {
-    status = "✅";
-    message = `${label} matches`;
-  } else if (similarity > 0.7) {
-    status = "⚠️";
-    message = `Partial match (${Math.round(similarity * 100)}% similar)`;
-  } else {
-    status = "❌";
-    message = `${label} does not match`;
-  }
-
-  return {
-    field: label,
-    extracted: extractedText,
-    expected: expected.text,
-    status,
-    message,
-  };
 }
 
 /**
@@ -389,9 +338,13 @@ function compareGovernmentWarning(
   const expectedIsStandard = STANDARD_GOV_WARNINGS.includes(normalizedExpected);
   const extractedIsStandard = STANDARD_GOV_WARNINGS.includes(normalizedExtracted);
 
-  if (normalizedExtracted === normalizedExpected) {
+  if (
+    normalizedExtracted === normalizedExpected ||
+    (normalizedExpected.length > 0 &&
+      normalizedExtracted.includes(normalizedExpected))
+  ) {
     status = "✅";
-    message = "Government warning matches exactly";
+    message = "Government warning contains expected wording";
   } else if (expectedIsStandard && extractedIsStandard) {
     status = "✅";
     message = "Government warning matches standard wording";
@@ -541,12 +494,24 @@ function applyAIEvaluationStatus(
     );
   }
 
-  const status: "✅" | "❌" = evaluation.accurate ? "✅" : "❌";
-  return results.map((result) =>
-    result.field === "Government Warning"
-      ? result
-      : { ...result, status }
-  );
+  const fieldMap: Record<string, keyof AccuracyDecision["fields"]> = {
+    Brand: "brandName",
+    "Class/Type": "classType",
+    "Alcohol Content": "alcoholContent",
+    "Net Contents": "netContents",
+    "Bottler/Producer": "bottlerProducer",
+    "Country of Origin": "countryOfOrigin",
+  };
+
+  return results.map((result) => {
+    const key = fieldMap[result.field];
+    if (!key) {
+      return result;
+    }
+    const status: "✅" | "❌" =
+      evaluation.fields[key] === 1 ? "✅" : "❌";
+    return { ...result, status };
+  });
 }
 
 /**

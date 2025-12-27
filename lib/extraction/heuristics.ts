@@ -1,4 +1,8 @@
-import type { ExpectedAlcoholLabel, ExtractedAlcoholLabel } from "@/lib/schemas";
+import type {
+  ExpectedAlcoholLabel,
+  ExtractedAlcoholLabel,
+  FieldAccuracy,
+} from "@/lib/schemas";
 import type { ExtractionCandidate } from "@/lib/extraction/types";
 
 // Keywords used to infer beer class/type when product type is unknown.
@@ -111,6 +115,10 @@ export function countMissingFields(extracted: ExtractedAlcoholLabel): number {
   }, 0);
 }
 
+function countFieldFailures(fields: FieldAccuracy): number {
+  return Object.values(fields).filter((value) => value === 0).length;
+}
+
 /**
  * Returns true when the contender is a stronger candidate than the current one.
  * Preference order: accuracy, fewer mismatches, fewer missing fields, then index.
@@ -123,12 +131,12 @@ export function isBetterCandidate(
   // Rank by accuracy, then fewer mismatches, then fewer missing fields.
   if (expected) {
     const contenderAccuracy = contender.evaluation
-      ? contender.evaluation.accurate
+      ? contender.evaluation.passed
         ? 1
         : 0
       : -1;
     const currentAccuracy = current.evaluation
-      ? current.evaluation.accurate
+      ? current.evaluation.passed
         ? 1
         : 0
       : -1;
@@ -138,10 +146,10 @@ export function isBetterCandidate(
     }
 
     const contenderMismatches = contender.evaluation
-      ? contender.evaluation.mismatchedFields.length
+      ? countFieldFailures(contender.evaluation.fields)
       : Number.POSITIVE_INFINITY;
     const currentMismatches = current.evaluation
-      ? current.evaluation.mismatchedFields.length
+      ? countFieldFailures(current.evaluation.fields)
       : Number.POSITIVE_INFINITY;
 
     if (contenderMismatches !== currentMismatches) {

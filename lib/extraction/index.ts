@@ -2,10 +2,23 @@ import OpenAI from "openai";
 import crypto from "crypto";
 import sharp from "sharp";
 import { createReadSasUrl, uploadAndGetSasUrl } from "@/lib/azureBlob";
-import { expectedAlcoholLabelSchema } from "@/lib/schemas";
+import {
+  expectedAlcoholLabelSchema,
+  type AdditiveDisclosure,
+  type AccuracyDecision,
+  type ExtractedAlcoholLabel,
+  type FieldAccuracy,
+  type GovernmentWarningField,
+  type SimpleField,
+} from "@/lib/schemas";
 import type { ExpectedAlcoholLabel } from "@/lib/schemas";
 import { evaluateCandidates, runExtractionPasses } from "@/lib/extraction/engine";
-import { isBetterCandidate } from "@/lib/extraction/heuristics";
+import {
+  isBetterCandidate,
+  shouldCheckAdditives,
+  shouldCheckAlcoholContent,
+  shouldCheckCountryOfOrigin,
+} from "@/lib/extraction/heuristics";
 import type {
   BlobLike,
   ExtractLabelResult,
@@ -19,6 +32,256 @@ import type {
 
 // Fallback when a file has no MIME type.
 const DEFAULT_MIME_TYPE = "image/jpeg";
+
+const FIELD_KEYS = [
+  "brandName",
+  "classType",
+  "alcoholContent",
+  "netContents",
+  "governmentWarning",
+  "bottlerProducer",
+  "countryOfOrigin",
+  "additivesDisclosed",
+] as const;
+
+type FieldKey = (typeof FIELD_KEYS)[number];
+
+function getEvaluationFlags(expected: ExpectedAlcoholLabel) {
+  return {
+    includeAlcohol: shouldCheckAlcoholContent(expected),
+    includeCountry: shouldCheckCountryOfOrigin(expected),
+    includeAdditives: shouldCheckAdditives(expected),
+  };
+}
+
+function buildDefaultFields(
+  flags: ReturnType<typeof getEvaluationFlags>,
+  defaultValue: 0 | 1
+): FieldAccuracy {
+  return {
+    brandName: defaultValue,
+    classType: defaultValue,
+    alcoholContent: flags.includeAlcohol ? defaultValue : 1,
+    netContents: defaultValue,
+    governmentWarning: defaultValue,
+    bottlerProducer: defaultValue,
+    countryOfOrigin: flags.includeCountry ? defaultValue : 1,
+    additivesDisclosed: flags.includeAdditives ? defaultValue : 1,
+  };
+}
+
+function normalizeForSimilarity(text: string): string {
+  return text
+    .toLowerCase()
+    .replace(/[^\w\s]/g, "")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function levenshteinDistance(str1: string, str2: string): number {
+  const len1 = str1.length;
+  const len2 = str2.length;
+  const matrix: number[][] = [];
+
+  for (let i = 0; i <= len1; i++) {
+    matrix[i] = [i];
+  }
+
+  for (let j = 0; j <= len2; j++) {
+    matrix[0][j] = j;
+  }
+
+  for (let i = 1; i <= len1; i++) {
+    for (let j = 1; j <= len2; j++) {
+      const cost = str1[i - 1] === str2[j - 1] ? 0 : 1;
+      matrix[i][j] = Math.min(
+        matrix[i - 1][j] + 1,
+        matrix[i][j - 1] + 1,
+        matrix[i - 1][j - 1] + cost
+      );
+    }
+  }
+
+  return matrix[len1][len2];
+}
+
+function similarityRatio(str1: string, str2: string): number {
+  const distance = levenshteinDistance(str1, str2);
+  const maxLength = Math.max(str1.length, str2.length);
+  if (maxLength === 0) return 1;
+  return 1 - distance / maxLength;
+}
+
+function getTextValue(
+  value: SimpleField | GovernmentWarningField | null
+): string {
+  return value?.text ?? "";
+}
+
+function getExpectedValue(
+  expected: ExpectedAlcoholLabel,
+  key: FieldKey
+): SimpleField | GovernmentWarningField | AdditiveDisclosure | null {
+  switch (key) {
+    case "brandName":
+      return expected.brandName;
+    case "classType":
+      return expected.classType;
+    case "alcoholContent":
+      return expected.alcoholContent;
+    case "netContents":
+      return expected.netContents;
+    case "governmentWarning":
+      return expected.governmentWarning;
+    case "bottlerProducer":
+      return expected.bottlerProducer;
+    case "countryOfOrigin":
+      return expected.countryOfOrigin;
+    case "additivesDisclosed":
+      return expected.additivesDetected;
+  }
+}
+
+function similarityScore(
+  key: FieldKey,
+  extracted: ExtractedAlcoholLabel[FieldKey],
+  expected: SimpleField | GovernmentWarningField | AdditiveDisclosure | null
+): number {
+  if (!expected) return 0;
+
+  if (key === "additivesDisclosed") {
+    const expectedAdditives = expected as AdditiveDisclosure;
+    const extractedAdditives = extracted as AdditiveDisclosure | null;
+    if (!extractedAdditives) return 0;
+
+    const keys = Object.keys(expectedAdditives) as Array<
+      keyof AdditiveDisclosure
+    >;
+    const matches = keys.filter(
+      (field) => expectedAdditives[field] === extractedAdditives[field]
+    ).length;
+    return matches / keys.length;
+  }
+
+  const expectedText = normalizeForSimilarity(
+    getTextValue(expected as SimpleField | GovernmentWarningField | null)
+  );
+  const extractedText = normalizeForSimilarity(
+    getTextValue(extracted as SimpleField | GovernmentWarningField | null)
+  );
+
+  if (!expectedText) return 0;
+  return similarityRatio(extractedText, expectedText);
+}
+
+function selectBestCandidate(
+  candidates: ExtractionCandidate[],
+  expectedData: ExpectedAlcoholLabel | null
+): ExtractionCandidate {
+  return candidates.reduce((current, contender) =>
+    isBetterCandidate(contender, current, expectedData) ? contender : current
+  );
+}
+
+function selectContender(
+  contenders: Array<{
+    index: number;
+    score: 0 | 1;
+    similarity: number;
+    hasValue: boolean;
+  }>,
+  requireAccurate: boolean
+) {
+  const pool = requireAccurate
+    ? contenders.filter((contender) => contender.score === 1)
+    : contenders;
+
+  return pool.reduce((best, current) => {
+    if (current.similarity !== best.similarity) {
+      return current.similarity > best.similarity ? current : best;
+    }
+    if (current.hasValue !== best.hasValue) {
+      return current.hasValue ? current : best;
+    }
+    return current.index < best.index ? current : best;
+  });
+}
+
+function mergeCandidates(
+  candidates: ExtractionCandidate[],
+  expected: ExpectedAlcoholLabel,
+  logger: LoggerFns
+): { label: ExtractedAlcoholLabel; evaluation: AccuracyDecision } {
+  const flags = getEvaluationFlags(expected);
+  const fallbackFields = buildDefaultFields(flags, 0);
+  const candidateFields = candidates.map(
+    (candidate) => candidate.evaluation?.fields ?? fallbackFields
+  );
+
+  const mergedFields = buildDefaultFields(flags, 0);
+  const mergedLabel: ExtractedAlcoholLabel = {
+    brandName: null,
+    classType: null,
+    alcoholContent: null,
+    netContents: null,
+    governmentWarning: null,
+    bottlerProducer: null,
+    countryOfOrigin: null,
+    additivesDisclosed: null,
+  };
+
+  FIELD_KEYS.forEach((key) => {
+    const expectedValue = getExpectedValue(expected, key);
+    const contenders = candidates.map((candidate, index) => {
+      const value = candidate.extracted[key];
+      return {
+        index,
+        score: candidateFields[index][key],
+        similarity: similarityScore(key, value, expectedValue),
+        hasValue: value !== null && value !== undefined,
+      };
+    });
+
+    const hasAccurate = contenders.some((contender) => contender.score === 1);
+    const best = selectContender(contenders, hasAccurate);
+    const selected = candidates[best.index].extracted;
+    switch (key) {
+      case "brandName":
+        mergedLabel.brandName = selected.brandName;
+        break;
+      case "classType":
+        mergedLabel.classType = selected.classType;
+        break;
+      case "alcoholContent":
+        mergedLabel.alcoholContent = selected.alcoholContent;
+        break;
+      case "netContents":
+        mergedLabel.netContents = selected.netContents;
+        break;
+      case "governmentWarning":
+        mergedLabel.governmentWarning = selected.governmentWarning;
+        break;
+      case "bottlerProducer":
+        mergedLabel.bottlerProducer = selected.bottlerProducer;
+        break;
+      case "countryOfOrigin":
+        mergedLabel.countryOfOrigin = selected.countryOfOrigin;
+        break;
+      case "additivesDisclosed":
+        mergedLabel.additivesDisclosed = selected.additivesDisclosed;
+        break;
+    }
+    mergedFields[key] = hasAccurate ? 1 : 0;
+  });
+
+  const passed = Object.values(mergedFields).every((value) => value === 1);
+  logger.log("[extract-label] merged evaluation", mergedFields, { passed });
+
+  return {
+    label: mergedLabel,
+    evaluation: { fields: mergedFields, passed },
+  };
+}
 
 // Type guard that works for browser File and undici File/Blob.
 /**
@@ -176,7 +439,8 @@ async function extractFromImageUrl(
   imageUrl: string,
   expectedData: ExpectedAlcoholLabel | null,
   config: OpenAIConfig,
-  logger: LoggerFns
+  logger: LoggerFns,
+  imageLabel?: string
 ): Promise<ExtractLabelResult> {
   // Initialize OpenAI client for extraction and evaluation calls.
   const client = new OpenAI({
@@ -201,26 +465,27 @@ async function extractFromImageUrl(
     extractionResult.value
   );
 
-  const bestCandidate = selectBestCandidate(evaluatedCandidates, expectedData);
+  if (expectedData) {
+    const labelSuffix = imageLabel ? ` (${imageLabel})` : "";
+    evaluatedCandidates.forEach((candidate) => {
+      logger.log(
+        `[extract-label] evaluation attempt ${candidate.index + 1}${labelSuffix}`,
+        candidate.evaluation ?? null
+      );
+    });
+  }
 
-  return {
-    ok: true,
-    label: bestCandidate.extracted,
-    evaluation: bestCandidate.evaluation,
-  };
-}
+  if (!expectedData) {
+    const bestCandidate = selectBestCandidate(evaluatedCandidates, expectedData);
+    return {
+      ok: true,
+      label: bestCandidate.extracted,
+      evaluation: bestCandidate.evaluation,
+    };
+  }
 
-// Select the strongest candidate based on accuracy and completeness.
-/**
- * Selects the best candidate using accuracy, mismatches, and completeness.
- */
-function selectBestCandidate(
-  candidates: ExtractionCandidate[],
-  expectedData: ExpectedAlcoholLabel | null
-): ExtractionCandidate {
-  return candidates.reduce((current, contender) =>
-    isBetterCandidate(contender, current, expectedData) ? contender : current
-  );
+  const merged = mergeCandidates(evaluatedCandidates, expectedData, logger);
+  return { ok: true, label: merged.label, evaluation: merged.evaluation };
 }
 
 /**
@@ -261,11 +526,13 @@ export async function extractLabelFromFormData(
     return uploadResult.error;
   }
 
+  const imageLabel = imageResult.value.name ?? undefined;
   return extractFromImageUrl(
     uploadResult.value.imageUrl,
     expectedData,
     configResult.value,
-    logger
+    logger,
+    imageLabel
   );
 }
 
@@ -276,7 +543,7 @@ export async function extractLabelFromFormData(
 export async function extractLabelFromBlobName(
   blobName: string,
   expectedData: ExpectedAlcoholLabel | null,
-  options: { logger?: Logger } = {}
+  options: { logger?: Logger; imageName?: string } = {}
 ): Promise<ExtractLabelResult> {
   const configResult = validateConfig();
   if (!configResult.ok) {
@@ -284,6 +551,7 @@ export async function extractLabelFromBlobName(
   }
 
   const logger = resolveLogger(options.logger);
+  const imageLabel = options.imageName ?? blobName;
 
   try {
     const { readUrl } = await createReadSasUrl({ blobName });
@@ -291,7 +559,8 @@ export async function extractLabelFromBlobName(
       readUrl,
       expectedData,
       configResult.value,
-      logger
+      logger,
+      imageLabel
     );
   } catch (error) {
     logger.error("[extract-label] failed to create read SAS", error);

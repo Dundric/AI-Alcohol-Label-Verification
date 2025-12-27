@@ -50,6 +50,7 @@ export type BlobLike = {
   arrayBuffer: () => Promise<ArrayBuffer>;
   type?: string;
   size?: number;
+  name?: string;
 };
 
 export type LoggerFns = {

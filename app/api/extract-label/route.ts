@@ -20,7 +20,11 @@ export async function POST(request: Request) {
       } catch {
         return NextResponse.json({ error: "Invalid JSON payload" }, { status: 400 });
       }
-      const body = (payload ?? {}) as { blobName?: unknown; expected?: unknown };
+      const body = (payload ?? {}) as {
+        blobName?: unknown;
+        expected?: unknown;
+        imageName?: unknown;
+      };
       const blobName = typeof body.blobName === "string" ? body.blobName : null;
       if (!blobName) {
         return NextResponse.json(
@@ -31,9 +35,11 @@ export async function POST(request: Request) {
 
       const expectedParsed = expectedAlcoholLabelSchema.safeParse(body.expected);
       const expected = expectedParsed.success ? expectedParsed.data : null;
+      const imageName = typeof body.imageName === "string" ? body.imageName : undefined;
 
       const result = await extractLabelFromBlobName(blobName, expected, {
         logger: console,
+        imageName,
       });
       if (!result.ok) {
         return NextResponse.json(

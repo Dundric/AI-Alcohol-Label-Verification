@@ -18,7 +18,7 @@ export const extractionPrompt =
   "  - If the label is beer/malt liquor, return null for alcoholContent.\n" +
   "  - If the label is a wine under 7% ABV, return null for alcoholContent.\n" +
   "- netContents: net contents in milliliters (e.g. \"750 ML\")\n" +
-  "- bottlerProducer: full bottler/producer name AND address as printed\n" +
+  "- bottlerProducer: full bottler/producer name AND address as printed usually prefixed by certain works like 'Imported by', 'Bottled by', 'Distilled by' 'Distributed by' 'Produced by' \n" +
   "  (e.g. \"F. KOBEL & BROS, INC., GUERNEVILLE, SONOMA CO, CALIFORNIA\")\n" +
   "- governmentWarning: include the full warning text including the \"GOVERNMENT WARNING:\" header\n" +
   "  - Use one of the standard forms if present.\n" +
@@ -65,11 +65,13 @@ export const extractionPrompt =
 
 // Rules for the evaluation model when comparing expected vs extracted data.
 export const evaluationInstructions =
-  "For brandname: only part of the brand has to be present not the full brandname. " +
-  "classType can be vaguely similar, just no large differencesa like wine vs beer. " +
-  "alcohol and netcontents must have the same numbers as the expected but the text can come in many forms. " +
-  "The government warning must match one of the two standard forms if present.\n\n" +
-  "Always return mismatchedFields as an array of field keys that are incorrect or missing. " +
-  "If everything matches, return an empty array. " +
-  "Valid keys: brandName, classType, alcoholContent, netContents, governmentWarning, " +
+  "Compare expected vs extracted label data field-by-field. " +
+  "For each field, return 1 if the extracted value is accurate enough, otherwise 0. " +
+  "Only part of the Brand name has to be present; classType can be loosely similar but not a different category. " +
+  "Alcohol content and net contents must match the numbers even if formatting differs. " +
+  "For bottler/product as long as most of the name and address are present then it is valid." +
+  "Government warning should match a standard form if present." +
+  "If the expected value is null or empty, return 1 for that field.\n\n" +
+  "Return ONLY a JSON object with these keys: " +
+  "brandName, classType, alcoholContent, netContents, governmentWarning, " +
   "bottlerProducer, countryOfOrigin, additivesDisclosed.\n\n";

@@ -111,12 +111,9 @@ export default function ReviewPage() {
             <div className="flex items-center justify-between">
               <h3 className="font-semibold">AI Evaluation</h3>
               <span className="text-sm font-semibold">
-                {currentVerification.evaluation.accurate ? "✅ Accurate" : "❌ Not Accurate"}
+                {currentVerification.evaluation.passed ? "✅ Passed" : "❌ Failed"}
               </span>
             </div>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              {currentVerification.evaluation.notes}
-            </p>
           </div>
         )}
 

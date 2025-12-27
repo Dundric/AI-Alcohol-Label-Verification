@@ -1,14 +1,12 @@
 import OpenAI from "openai";
 import type { ResponseInputMessageContentList } from "openai/resources/responses/responses";
 import { zodTextFormat } from "openai/helpers/zod";
-import {
-  accuracyDecisionSchema,
-  extractedAlcoholLabelSchema,
-} from "@/lib/schemas";
+import { fieldAccuracySchema, extractedAlcoholLabelSchema } from "@/lib/schemas";
 import type {
   AccuracyDecision,
   ExtractedAlcoholLabel,
   ExpectedAlcoholLabel,
+  FieldAccuracy,
 } from "@/lib/schemas";
 import {
   shouldCheckAdditives,
@@ -34,6 +32,23 @@ function getEvaluationFlags(expected: ExpectedAlcoholLabel) {
   };
 }
 
+function applyEvaluationOverrides(
+  fields: FieldAccuracy,
+  flags: ReturnType<typeof getEvaluationFlags>
+): FieldAccuracy {
+  return {
+    ...fields,
+    alcoholContent: flags.includeAlcohol ? fields.alcoholContent : 1,
+    countryOfOrigin: flags.includeCountry ? fields.countryOfOrigin : 1,
+    additivesDisclosed: flags.includeAdditives ? fields.additivesDisclosed : 1,
+  };
+}
+
+function buildDecision(fields: FieldAccuracy): AccuracyDecision {
+  const passed = Object.values(fields).every((value) => value === 1);
+  return { fields, passed };
+}
+
 // Run a single extraction pass and return the parsed label, if any.
 /**
  * Executes a single extraction call to Azure OpenAI and parses the result.
@@ -54,14 +69,40 @@ export async function runExtractionPass(
   content.push({ type: "input_image", image_url: imageUrl, detail: "high" });
 
   // Parse directly into the expected schema so downstream code can trust types.
-  const response = await client.responses.parse({
-    model: deployment,
-    input: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content },
-    ],
-    text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
-  });
+  let response: Awaited<ReturnType<typeof client.responses.parse>>;
+  try {
+    response = await client.responses.parse({
+      model: deployment,
+      input: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content },
+      ],
+      text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
+    });
+  } catch (error: any) {
+    const code =
+      error?.code ??
+      error?.error?.code ??
+      error?.error?.type ??
+      error?.type ??
+      "";
+    if (code === "content_policy_violation") {
+      log(
+        `[extract-label] ${`attempt ${attempt}`} content policy violation, retrying once`
+      );
+      await new Promise((resolve) => setTimeout(resolve, 300));
+      response = await client.responses.parse({
+        model: deployment,
+        input: [
+          { role: "system", content: systemPrompt },
+          { role: "user", content },
+        ],
+        text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
+      });
+    } else {
+      throw error;
+    }
+  }
 
   const durationMs = Math.round(performance.now() - start);
   const attemptLabel = `attempt ${attempt}`;
@@ -140,11 +181,9 @@ export async function runEvaluationPass(
     netContents: expectedData.netContents,
     governmentWarning: expectedData.governmentWarning,
     bottlerProducer: expectedData.bottlerProducer,
-    ...(flags.includeAlcohol ? { alcoholContent: expectedData.alcoholContent } : {}),
-    ...(flags.includeCountry ? { countryOfOrigin: expectedData.countryOfOrigin } : {}),
-    ...(flags.includeAdditives
-      ? { additivesDisclosed: expectedData.additivesDetected }
-      : {}),
+    alcoholContent: flags.includeAlcohol ? expectedData.alcoholContent : null,
+    countryOfOrigin: flags.includeCountry ? expectedData.countryOfOrigin : null,
+    additivesDisclosed: flags.includeAdditives ? expectedData.additivesDetected : null,
   };
 
   const evaluationExtracted = {
@@ -153,11 +192,9 @@ export async function runEvaluationPass(
     netContents: extracted.netContents,
     governmentWarning: extracted.governmentWarning,
     bottlerProducer: extracted.bottlerProducer,
-    ...(flags.includeAlcohol ? { alcoholContent: extracted.alcoholContent } : {}),
-    ...(flags.includeCountry ? { countryOfOrigin: extracted.countryOfOrigin } : {}),
-    ...(flags.includeAdditives
-      ? { additivesDisclosed: extracted.additivesDisclosed }
-      : {}),
+    alcoholContent: flags.includeAlcohol ? extracted.alcoholContent : null,
+    countryOfOrigin: flags.includeCountry ? extracted.countryOfOrigin : null,
+    additivesDisclosed: flags.includeAdditives ? extracted.additivesDisclosed : null,
   };
 
   const evalResponse = await client.responses.parse({
@@ -183,10 +220,18 @@ export async function runEvaluationPass(
         ],
       },
     ],
-    text: { format: zodTextFormat(accuracyDecisionSchema, "evaluation") },
+    text: { format: zodTextFormat(fieldAccuracySchema, "evaluation") },
   });
 
-  return evalResponse.output_parsed ?? null;
+  if (!evalResponse.output_parsed) {
+    return null;
+  }
+
+  const adjusted = applyEvaluationOverrides(
+    evalResponse.output_parsed as FieldAccuracy,
+    flags
+  );
+  return buildDecision(adjusted);
 }
 
 // Evaluate each candidate when expected data exists.

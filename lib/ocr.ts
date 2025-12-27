@@ -151,6 +151,7 @@ async function requestStructuredLabelData(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       blobName: uploadPayload.blobName,
+      imageName: imageFile.name,
       expected: expectedData ?? null,
     }),
   });
