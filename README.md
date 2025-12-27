@@ -146,7 +146,7 @@ npm start
 1. **Navigate** to the home page at `http://localhost:3000`
 2. Click **"Start Uploading →"** or go to `/upload`
 3. Ensure **"Single"** mode is selected
-4. **Upload** your label image (JPEG, PNG, or WebP)
+4. **Upload** your label image (JPEG, PNG, WebP, GIF, BMP, or TIFF)
    - Note: Combine front, back, and side panels into one image if needed
 5. **Fill in the Expected Data form** with the reference information
 6. Click **"Process & Verify Labels"**
@@ -250,8 +250,8 @@ The system uses sophisticated validation with configurable thresholds:
 
 - Check that your Azure OpenAI deployment supports vision (GPT-4o or GPT-4 Turbo with Vision)
 - Verify API key has proper permissions
-- Check image file size (should be reasonable, < 10MB recommended)
-- Ensure image format is JPEG, PNG, or WebP
+- Check image file size (max 10MB per file)
+- Ensure image format is JPEG, PNG, WebP, GIF, BMP, or TIFF
 
 ### CSV Upload Issues
 
@@ -263,7 +263,7 @@ The system uses sophisticated validation with configurable thresholds:
 ### Slow Batch Processing
 
 - Azure OpenAI API has rate limits - adjust `CSV_PARALLEL_LIMIT` in `/lib/upload/constants.ts`
-- Default is 2 concurrent requests to avoid rate limiting
+- Default is 5 concurrent requests; reduce if hitting rate limits
 - Large batches will take time due to AI processing
 
 ## Deployment
