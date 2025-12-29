@@ -187,8 +187,7 @@ export async function runExtractionPasses(
   try {
     extractionResults = await Promise.all([
       runExtractionPass(client, deployments, imageUrl, logger.log, 1),
-      runExtractionPass(client, deployments, imageUrl, logger.log, 2),
-      runExtractionPass(client, deployments, imageUrl, logger.log, 3),
+      runExtractionPass(client, deployments, imageUrl, logger.log, 2)
     ]);
   } catch (error) {
     return {
