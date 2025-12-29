@@ -19,12 +19,13 @@ export async function compressAndEncodeImage(
 
   // Attempt compression to reduce size and improve OCR; fall back on failure.
   try {
-    const compressed = await sharp(buffer)
-      .resize({ width: 1600, withoutEnlargement: true })
-      .normalize()
-      .sharpen()
-      .jpeg({ quality: 70 })
-      .toBuffer();
+    const pipeline = sharp(buffer);
+    pipeline.resize({ width: 1600, withoutEnlargement: true });
+    pipeline.rotate();
+    pipeline.normalize();
+    pipeline.sharpen();
+    pipeline.jpeg({ quality: 70 });
+    const compressed = await pipeline.toBuffer();
     uploadBuffer = Buffer.from(compressed);
     uploadContentType = DEFAULT_MIME_TYPE;
     logger.log("[extract-label] image bytes:", buffer.length);

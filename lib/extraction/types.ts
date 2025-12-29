@@ -31,7 +31,7 @@ export type StepResult<T> =
 export type OpenAIConfig = {
   endpoint: string;
   apiKey: string;
-  deployment: string;
+  deployments: string[];
 };
 
 export type ExtractionCandidate = {

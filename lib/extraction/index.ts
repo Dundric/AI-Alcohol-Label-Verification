@@ -13,6 +13,7 @@ import {
 import type { ExpectedAlcoholLabel } from "@/lib/schemas";
 import type {
   ExtractLabelResult,
+  ExtractionCandidate,
   FormDataLike,
   Logger,
   LoggerFns,
@@ -37,7 +38,7 @@ async function extractFromImageUrl(
 
   const extractionResult = await runExtractionPasses(
     client,
-    config.deployment,
+    config.deployments,
     imageUrl,
     logger
   );
@@ -45,12 +46,23 @@ async function extractFromImageUrl(
     return extractionResult.error;
   }
 
-  const evaluatedCandidates = await evaluateCandidates(
-    client,
-    config.deployment,
-    expectedData,
-    extractionResult.value
-  );
+  let evaluatedCandidates: ExtractionCandidate[];
+  try {
+    evaluatedCandidates = await evaluateCandidates(
+      client,
+      config.deployments,
+      expectedData,
+      extractionResult.value
+    );
+  } catch (error) {
+    const status =
+      typeof (error as { status?: number })?.status === "number"
+        ? (error as { status?: number }).status!
+        : 502;
+    const message =
+      (error as Error)?.message ?? "Evaluation failed. Please try again later.";
+    return { ok: false, status, error: message };
+  }
 
   if (expectedData) {
     const labelSuffix = imageLabel ? ` (${imageLabel})` : "";

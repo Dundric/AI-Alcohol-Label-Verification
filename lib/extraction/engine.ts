@@ -20,6 +20,71 @@ import {
 } from "@/lib/extraction/prompts";
 import type { ExtractionCandidate, LoggerFns, StepResult } from "@/lib/extraction/types";
 
+function isRateLimitError(error: unknown): boolean {
+  const anyError = error as {
+    status?: number;
+    code?: string;
+    type?: string;
+    message?: string;
+    error?: { status?: number; code?: string; type?: string; message?: string };
+  };
+  const status = anyError?.status ?? anyError?.error?.status;
+  const code = anyError?.code ?? anyError?.error?.code ?? anyError?.type ?? anyError?.error?.type;
+  const message = anyError?.message ?? anyError?.error?.message ?? "";
+  return (
+    status === 429 ||
+    code === "rate_limit_exceeded" ||
+    code === "too_many_requests" ||
+    code === "insufficient_quota" ||
+    /rate limit/i.test(message)
+  );
+}
+
+function getErrorStatus(error: unknown, fallback: number): number {
+  const anyError = error as { status?: number; error?: { status?: number } };
+  const status = anyError?.status ?? anyError?.error?.status;
+  if (typeof status === "number") {
+    return status;
+  }
+  return isRateLimitError(error) ? 429 : fallback;
+}
+
+function getErrorMessage(error: unknown, fallback: string): string {
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+  const anyError = error as { error?: { message?: string } };
+  return anyError?.error?.message ?? fallback;
+}
+
+async function callWithModelFallback<T>(
+  deployments: string[],
+  log: LoggerFns["log"],
+  label: string,
+  runner: (deployment: string) => Promise<T>
+): Promise<T> {
+  for (const deployment of deployments) {
+    try {
+      if (deployment !== deployments[0]) {
+        log(`[extract-label] ${label} trying fallback model ${deployment}`);
+      }
+      return await runner(deployment);
+    } catch (error) {
+      if (isRateLimitError(error)) {
+        log(`[extract-label] ${label} rate limited on ${deployment}`);
+        continue;
+      }
+      throw error;
+    }
+  }
+
+  const waitError = new Error(
+    "All models are at capacity. Please wait and try again."
+  );
+  (waitError as { status?: number }).status = 429;
+  throw waitError;
+}
+
 
 //This files extracts the alochol label from the image using Azure OpenAI. We run two extraction passes in parallel to reduce variance. We then evaluate each extraction against expected data and return the evaluation results as an array of candidates.
 
@@ -30,7 +95,7 @@ import type { ExtractionCandidate, LoggerFns, StepResult } from "@/lib/extractio
  */
 export async function runExtractionPass(
   client: OpenAI,
-  deployment: string,
+  deployments: string[],
   imageUrl: string,
   log: LoggerFns["log"],
   attempt: number
@@ -43,40 +108,45 @@ export async function runExtractionPass(
   content.push({ type: "input_image", image_url: imageUrl, detail: "high" });
 
   // Parse directly into the expected schema so downstream code can trust types.
-  let response: Awaited<ReturnType<typeof client.responses.parse>>;
-  try {
-    response = await client.responses.parse({
-      model: deployment,
-      input: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content },
-      ],
-      text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
-    });
-  } catch (error: any) {
-    const code =
-      error?.code ??
-      error?.error?.code ??
-      error?.error?.type ??
-      error?.type ??
-      "";
-    if (code === "content_policy_violation") {
-      log(
-        `[extract-label] ${`attempt ${attempt}`} content policy violation, retrying once`
-      );
-      await new Promise((resolve) => setTimeout(resolve, 300));
-      response = await client.responses.parse({
-        model: deployment,
-        input: [
-          { role: "system", content: systemPrompt },
-          { role: "user", content },
-        ],
-        text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
-      });
-    } else {
-      throw error;
+  const response = await callWithModelFallback(
+    deployments,
+    log,
+    `attempt ${attempt}`,
+    async (deployment) => {
+      try {
+        return await client.responses.parse({
+          model: deployment,
+          input: [
+            { role: "system", content: systemPrompt },
+            { role: "user", content },
+          ],
+          text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
+        });
+      } catch (error: any) {
+        const code =
+          error?.code ??
+          error?.error?.code ??
+          error?.error?.type ??
+          error?.type ??
+          "";
+        if (code === "content_policy_violation") {
+          log(
+            `[extract-label] ${`attempt ${attempt}`} content policy violation, retrying once`
+          );
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          return await client.responses.parse({
+            model: deployment,
+            input: [
+              { role: "system", content: systemPrompt },
+              { role: "user", content },
+            ],
+            text: { format: zodTextFormat(extractedAlcoholLabelSchema, "label") },
+          });
+        }
+        throw error;
+      }
     }
-  }
+  );
 
   const durationMs = Math.round(performance.now() - start);
   const attemptLabel = `attempt ${attempt}`;
@@ -107,17 +177,32 @@ export async function runExtractionPass(
  */
 export async function runExtractionPasses(
   client: OpenAI,
-  deployment: string,
+  deployments: string[],
   imageUrl: string,
   logger: LoggerFns
 ): Promise<StepResult<ExtractionCandidate[]>> {
   // Run two passes to reduce variance and pick the best result.
   logger.log("[extract-label] running parallel extractions");
-  const extractionResults = await Promise.all([
-    runExtractionPass(client, deployment, imageUrl, logger.log, 1),
-    runExtractionPass(client, deployment, imageUrl, logger.log, 2),
-    runExtractionPass(client, deployment, imageUrl, logger.log, 3)
-  ]);
+  let extractionResults: Array<ExtractedAlcoholLabel | null>;
+  try {
+    extractionResults = await Promise.all([
+      runExtractionPass(client, deployments, imageUrl, logger.log, 1),
+      runExtractionPass(client, deployments, imageUrl, logger.log, 2),
+      runExtractionPass(client, deployments, imageUrl, logger.log, 3),
+    ]);
+  } catch (error) {
+    return {
+      ok: false,
+      error: {
+        ok: false,
+        status: getErrorStatus(error, 502),
+        error: getErrorMessage(
+          error,
+          "Extraction failed. Please wait and try again."
+        ),
+      },
+    };
+  }
 
   // Filter out any responses that failed schema parsing.
   const candidates: ExtractionCandidate[] = [];
@@ -150,7 +235,7 @@ export async function runExtractionPasses(
  */
 export async function runEvaluationPass(
   client: OpenAI, 
-  deployment: string,
+  deployments: string[],
   expectedData: ExpectedAlcoholLabel,
   extracted: ExtractedAlcoholLabel
 ): Promise<AccuracyDecision | null> {
@@ -178,31 +263,37 @@ export async function runEvaluationPass(
     additivesDisclosed: flags.includeAdditives ? extracted.additivesDisclosed : null,
   };
 
-  const evalResponse = await client.responses.parse({
-    model: deployment,
-    input: [
-      {
-        role: "system",
-        content:
-          "Compare expected vs extracted label data and decide if the extraction is accurate. Allow differences in wording or formattting.",
-      },
-      {
-        role: "user",
-        content: [
+  const evalResponse = await callWithModelFallback(
+    deployments,
+    console.log,
+    "evaluation",
+    (deployment) =>
+      client.responses.parse({
+        model: deployment,
+        input: [
           {
-            type: "input_text",
-            text:
-              evaluationInstructions +
-              "Expected:\n" +
-              JSON.stringify(evaluationExpected) +
-              "\n\nExtracted:\n" +
-              JSON.stringify(evaluationExtracted),
+            role: "system",
+            content:
+              "Compare expected vs extracted label data and decide if the extraction is accurate. Allow differences in wording or formattting.",
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text:
+                  evaluationInstructions +
+                  "Expected:\n" +
+                  JSON.stringify(evaluationExpected) +
+                  "\n\nExtracted:\n" +
+                  JSON.stringify(evaluationExtracted),
+              },
+            ],
           },
         ],
-      },
-    ],
-    text: { format: zodTextFormat(fieldAccuracySchema, "evaluation") },
-  });
+        text: { format: zodTextFormat(fieldAccuracySchema, "evaluation") },
+      })
+  );
 
   if (!evalResponse.output_parsed) {
     return null;
@@ -221,7 +312,7 @@ export async function runEvaluationPass(
  */
 export async function evaluateCandidates(
   client: OpenAI,
-  deployment: string,
+  deployments: string[],
   expectedData: ExpectedAlcoholLabel | null,
   candidates: ExtractionCandidate[]
 ): Promise<ExtractionCandidate[]> {
@@ -231,7 +322,7 @@ export async function evaluateCandidates(
 
   const evaluations = await Promise.all(
     candidates.map((candidate) =>
-      runEvaluationPass(client, deployment, expectedData, candidate.extracted)
+      runEvaluationPass(client, deployments, expectedData, candidate.extracted)
     )
   );
 

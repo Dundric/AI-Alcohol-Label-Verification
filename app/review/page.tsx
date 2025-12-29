@@ -43,6 +43,78 @@ export default function ReviewPage() {
   const passCount = verifications.filter((v) => v.overallStatus === "✅").length;
   const warningCount = verifications.filter((v) => v.overallStatus === "⚠️").length;
   const failCount = verifications.filter((v) => v.overallStatus === "❌").length;
+  const escapeXml = (value: string) =>
+    value
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&apos;");
+  const handleExport = () => {
+    const exportedAt = new Date().toISOString();
+    const rows: string[] = [];
+    const addRow = (cells: string[]) => {
+      const row = cells
+        .map(
+          (cell) =>
+            `<Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`
+        )
+        .join("");
+      rows.push(`<Row>${row}</Row>`);
+    };
+
+    addRow([
+      "Image Name",
+      "Image Id",
+      "Overall Status",
+      "Evaluation Passed",
+      "Field",
+      "Status",
+      "Message",
+      "Expected",
+      "Extracted",
+    ]);
+
+    verifications.forEach((verification) => {
+      const evaluationPassed = verification.evaluation
+        ? verification.evaluation.passed
+          ? "passed"
+          : "failed"
+        : "missing";
+      verification.results.forEach((result) => {
+        addRow([
+          verification.imageName,
+          verification.imageId,
+          verification.overallStatus,
+          evaluationPassed,
+          result.field,
+          result.status,
+          result.message ?? "",
+          result.expected,
+          result.extracted,
+        ]);
+      });
+    });
+
+    const workbook = [
+      '<?xml version="1.0"?>',
+      '<?mso-application progid="Excel.Sheet"?>',
+      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
+      `<Worksheet ss:Name="Results"><Table>${rows.join("")}</Table></Worksheet>`,
+      "</Workbook>",
+    ].join("");
+
+    const blob = new Blob([workbook], {
+      type: "application/vnd.ms-excel",
+    });
+    const url = URL.createObjectURL(blob);
+    const stamp = exportedAt.replace(/[:.]/g, "-");
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `label-verifications-${stamp}.xls`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -323,6 +395,13 @@ export default function ReviewPage() {
 
       {/* Actions */}
       <div className="flex gap-4 justify-center">
+        <button
+          type="button"
+          onClick={handleExport}
+          className="bg-gray-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
+        >
+          Export Results
+        </button>
         <Link
           href="/upload"
           className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"

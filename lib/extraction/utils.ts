@@ -46,15 +46,24 @@ export function validateConfig(): StepResult<OpenAIConfig> {
   const endpoint = process.env.AZURE_OPENAI_ENDPOINT;
   const apiKey = process.env.AZURE_OPENAI_API_KEY;
   const deployment = process.env.AZURE_OPENAI_DEPLOYMENT;
+  const deploymentsRaw = process.env.AZURE_OPENAI_DEPLOYMENTS;
+  const deployments = deploymentsRaw
+    ? deploymentsRaw
+        .split(",")
+        .map((value) => value.trim())
+        .filter(Boolean)
+    : deployment
+      ? [deployment]
+      : [];
 
-  if (!endpoint || !apiKey || !deployment) {
+  if (!endpoint || !apiKey || deployments.length === 0) {
     return {
       ok: false,
       error: { ok: false, status: 500, error: "Missing Azure OpenAI configuration" },
     };
   }
 
-  return { ok: true, value: { endpoint, apiKey, deployment } };
+  return { ok: true, value: { endpoint, apiKey, deployments } };
 }
 
 // Pull the image file out of multipart form data.

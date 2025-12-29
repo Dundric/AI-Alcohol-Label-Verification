@@ -191,7 +191,11 @@ export default function UploadPage() {
       router.push("/review");
     } catch (error) {
       console.error("Error processing images:", error);
-      alert("Error processing images. Please try again.");
+      const message =
+        error instanceof Error
+          ? error.message
+          : "Error processing images. Please try again.";
+      alert(message);
     } finally {
       setIsProcessing(false);
     }

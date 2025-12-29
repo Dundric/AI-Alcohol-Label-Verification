@@ -123,7 +123,20 @@ async function requestStructuredLabelData(
   });
 
   if (!response.ok) {
-    throw new Error("Failed to extract label data");
+    let message = "Failed to extract label data";
+    try {
+      const errorPayload = await response.json();
+      const payloadMessage =
+        typeof errorPayload?.error === "string"
+          ? errorPayload.error
+          : errorPayload?.error?.error;
+      if (payloadMessage) {
+        message = payloadMessage;
+      }
+    } catch {
+      // Ignore JSON parsing errors and use the default message.
+    }
+    throw new Error(message);
   }
 
   const data = await response.json();
@@ -181,6 +194,9 @@ export async function extractLabelData(
   try {
     return await requestStructuredLabelData(imageFile, expectedData);
   } catch (error) {
+    if (error instanceof Error && /capacity|rate limit/i.test(error.message)) {
+      throw error;
+    }
     console.error("Falling back to mock OCR data:", error);
     return { label: getMockLabelData(imageName), evaluation: null };
   }
