@@ -170,9 +170,9 @@ export async function runExtractionPass(
     : null;
 }
 
-// Run two extraction passes in parallel and keep only valid candidates.
+// Run three extraction passes in parallel and keep only valid candidates.
 /**
- * Runs two extraction passes in parallel and returns only valid candidates.
+ * Runs three extraction passes in parallel and returns only valid candidates.
  * Emits errors when both passes fail or return no parsed data.
  */
 export async function runExtractionPasses(
@@ -181,7 +181,7 @@ export async function runExtractionPasses(
   imageUrl: string,
   logger: LoggerFns
 ): Promise<StepResult<ExtractionCandidate[]>> {
-  // Run two passes to reduce variance and pick the best result.
+  // Run three passes to reduce variance and pick the best result.
   logger.log("[extract-label] running parallel extractions");
   let extractionResults: Array<ExtractedAlcoholLabel | null>;
   try {

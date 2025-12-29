@@ -15,18 +15,24 @@ export function CsvUploadCard({
 }: CsvUploadCardProps) {
   return (
     <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-      {/* Updated Heading */}
       <h2 className="text-xl font-semibold mb-1">Expected Data CSV</h2>
-      
-      {/* New Subtitle */}
+
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         Download{" "}
-        <Link 
-          href="/Table-Example.csv" 
+        <Link
+          href="/Table-Example.csv"
           className="text-purple-500 hover:underline font-medium"
         >
           Template CSV Example
+        </Link>{" "}
+        and the{" "}
+        <Link
+          href="/Images.zip"
+          className="text-purple-500 hover:underline font-medium"
+        >
+          Example Images
         </Link>
+        {" "}the CSV goes with.
       </p>
 
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">

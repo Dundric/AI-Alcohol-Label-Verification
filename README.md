@@ -40,7 +40,7 @@ The system validates these critical label fields:
 
 ### 🎯 Intelligent Evaluation
 
-- **Multi-pass extraction** - Runs two parallel extraction attempts to reduce AI variance
+- **Multi-pass extraction** - Runs three parallel extraction attempts to reduce AI variance
 - **Smart merging** - Automatically selects best results from multiple extraction attempts
 - **Fuzzy matching** - Uses Levenshtein distance for brand and class comparisons
 - **Heuristic overrides** - Additional validation rules for edge cases
@@ -89,37 +89,27 @@ npm install
 
 ### 3. Configure Environment Variables
 
-Create a `.env.local` file in the root directory with the following required variables:
+Create a `.env` file in the root directory with the following required variables:
 
 ```bash
 # Azure OpenAI Configuration (REQUIRED)
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
 AZURE_OPENAI_API_KEY=your-api-key-here
-AZURE_OPENAI_DEPLOYMENT=your-deployment-name
+AZURE_OPENAI_DEPLOYMENTS=your-deployment-name-1,your-deployment-name-2
 
-# Azure Blob Storage (OPTIONAL - for cloud image storage)
-AZURE_STORAGE_CONNECTION_STRING=DefaultEndpointsProtocol=https;AccountName=...
-AZURE_STORAGE_CONTAINER_NAME=your-container-name
+My AZURE_OPENAI_DEPLOYMENTS=gpt-4.1-mini,gpt-4.1,gpt-5-mini
 
-# Azure Function (OPTIONAL - for external processing)
-AZURE_FUNCTION_VERIFY_IMAGE_URL=https://your-function-app.azurewebsites.net/api/verify-image
 ```
 
 #### How to Get Azure OpenAI Credentials:
 
 1. Go to [Azure Portal](https://portal.azure.com/)
-2. Create or select an **Azure OpenAI** resource
-3. Navigate to **Keys and Endpoint** section
-4. Copy the **Endpoint** and one of the **Keys**
-5. Go to **Model deployments** and note your **deployment name** (e.g., "gpt-4o")
+2. Sign up for an Azure Account
+2. Select **Foundry** service
+3. Click **Create a Foundry Resource**
+4. Follow steps to create **Endpoint** and one of the **Keys**
+5. Go to **Model deployments** and deploy at least GPT 4.1-mini note your **deployment name**
 
-#### Azure Blob Storage Setup (Optional):
-
-Only needed if you want to use cloud storage features. The application can work without this by processing images locally.
-
-1. Create an Azure Storage Account
-2. Create a Blob container
-3. Copy the connection string from **Access keys**
 
 ### 4. Run Development Server
 
@@ -203,13 +193,14 @@ Your CSV must include these columns (see `/Table-Example.csv` for reference):
     /hooks               # Custom React hooks
   /review                # Review/results page
     page.tsx             # Results comparison view
+    /components          # review UI components
   layout.tsx             # Root layout with navigation
   page.tsx               # Home page with instructions
   globals.css            # Global styles and Tailwind imports
 
 /lib
   /extraction            # Core extraction engine
-    engine.ts            # Multi-pass extraction and evaluation
+    engine.ts            # Multi-pass extraction/eval
     prompts.ts           # AI prompts for extraction
     image-service.ts     # Image processing and encoding
     merger.ts            # Candidate result merging logic
@@ -219,7 +210,6 @@ Your CSV must include these columns (see `/Table-Example.csv` for reference):
   schemas.ts             # Zod validation schemas
   compare.ts             # Comparison logic and fuzzy matching
   textSimilarity.ts      # String similarity algorithms
-  azureBlob.ts           # Azure Blob Storage utilities (optional)
   ocr.ts                 # Client-side OCR interface
 
 /public
@@ -227,20 +217,6 @@ Your CSV must include these columns (see `/Table-Example.csv` for reference):
   Table-Example.csv      # Example CSV template
 ```
 
-## Validation Rules
-
-The system uses sophisticated validation with configurable thresholds:
-
-| Field | Pass (✅) | Warning (⚠️) | Fail (❌) |
-|-------|----------|-------------|----------|
-| **Brand Name** | 85%+ similarity | 60-85% similarity | <60% similarity |
-| **Class/Type** | 85%+ similarity | 60-85% similarity | <60% similarity |
-| **ABV** | <0.1% difference | 0.1-1% difference | >1% difference |
-| **Net Contents** | Exact volume + unit | <5% volume difference | >5% difference or wrong unit |
-| **Government Warning** | Exact match + correct format | 95%+ similarity | <95% similarity or format issues |
-| **Bottler/Producer** | High similarity | Moderate similarity | Low similarity |
-| **Country of Origin** | Exact match | Close match | Mismatch |
-| **Additives** | All detected correctly | Partial match | Missing disclosures |
 
 ## Troubleshooting
 

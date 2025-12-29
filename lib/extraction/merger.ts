@@ -13,6 +13,16 @@ import {
   selectContender,
 } from "@/lib/extraction/heuristics";
 
+
+
+
+/**
+ * Chooses a single merged label from multiple extraction candidates by scoring
+ * each field against expected data and selecting the best contender per field.
+ * It builds a merged label from those winners, then marks a field as accurate
+ * only if at least one candidate scored that field as accurate. The returned
+ * evaluation reflects these merged field scores and overall pass/fail.
+ */
 export function mergeCandidates(
   candidates: ExtractionCandidate[],
   expected: ExpectedAlcoholLabel,

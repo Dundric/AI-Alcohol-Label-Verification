@@ -3,6 +3,14 @@
 import { useEffect, useState } from "react";
 import { LabelVerification } from "@/lib/schemas";
 import Link from "next/link";
+import { AdditiveDisclosurePanel } from "./components/AdditiveDisclosurePanel";
+import { AIEvaluationPanel } from "./components/AIEvaluationPanel";
+import { ExpectedDataPanel } from "./components/ExpectedDataPanel";
+import { ExtractedDataPanel } from "./components/ExtractedDataPanel";
+import { ImageSelector } from "./components/ImageSelector";
+import { ResultsTable } from "./components/ResultsTable";
+import { ReviewActions } from "./components/ReviewActions";
+import { SummaryPanel } from "./components/SummaryPanel";
 
 export default function ReviewPage() {
   const [verifications, setVerifications] = useState<LabelVerification[]>([]);
@@ -43,37 +51,39 @@ export default function ReviewPage() {
   const passCount = verifications.filter((v) => v.overallStatus === "✅").length;
   const warningCount = verifications.filter((v) => v.overallStatus === "⚠️").length;
   const failCount = verifications.filter((v) => v.overallStatus === "❌").length;
-  const escapeXml = (value: string) =>
-    value
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&apos;");
+  const sanitizeAscii = (value: string) => value.replace(/[^\x20-\x7E]/g, "?");
+  const escapePdfText = (value: string) =>
+    sanitizeAscii(value)
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)");
+  const wrapLine = (value: string, maxLength: number) => {
+    const trimmed = value.trim();
+    if (!trimmed) return [""];
+    const lines: string[] = [];
+    let remaining = trimmed;
+    while (remaining.length > maxLength) {
+      let splitAt = remaining.lastIndexOf(" ", maxLength);
+      if (splitAt <= 0) splitAt = maxLength;
+      lines.push(remaining.slice(0, splitAt));
+      remaining = remaining.slice(splitAt).trimStart();
+    }
+    if (remaining.length) {
+      lines.push(remaining);
+    }
+    return lines;
+  };
   const handleExport = () => {
     const exportedAt = new Date().toISOString();
-    const rows: string[] = [];
-    const addRow = (cells: string[]) => {
-      const row = cells
-        .map(
-          (cell) =>
-            `<Cell><Data ss:Type="String">${escapeXml(cell)}</Data></Cell>`
-        )
-        .join("");
-      rows.push(`<Row>${row}</Row>`);
+    const maxLineLength = 90;
+    const lines: string[] = [];
+    const addText = (text: string) => {
+      wrapLine(text, maxLineLength).forEach((line) => lines.push(line));
     };
 
-    addRow([
-      "Image Name",
-      "Image Id",
-      "Overall Status",
-      "Evaluation Passed",
-      "Field",
-      "Status",
-      "Message",
-      "Expected",
-      "Extracted",
-    ]);
+    addText("Label Verification Results");
+    addText(`Exported: ${exportedAt}`);
+    lines.push("");
 
     verifications.forEach((verification) => {
       const evaluationPassed = verification.evaluation
@@ -81,37 +91,89 @@ export default function ReviewPage() {
           ? "passed"
           : "failed"
         : "missing";
+      addText(
+        `Image: ${verification.imageName} (${verification.overallStatus})`
+      );
+      addText(`Evaluation: ${evaluationPassed}`);
       verification.results.forEach((result) => {
-        addRow([
-          verification.imageName,
-          verification.imageId,
-          verification.overallStatus,
-          evaluationPassed,
-          result.field,
-          result.status,
-          result.message ?? "",
-          result.expected,
-          result.extracted,
-        ]);
+        addText(`- ${result.field}: ${result.status} ${result.message ?? ""}`);
+        addText(`  Expected: ${result.expected}`);
+        addText(`  Extracted: ${result.extracted}`);
       });
+      lines.push("");
     });
 
-    const workbook = [
-      '<?xml version="1.0"?>',
-      '<?mso-application progid="Excel.Sheet"?>',
-      '<Workbook xmlns="urn:schemas-microsoft-com:office:spreadsheet" xmlns:ss="urn:schemas-microsoft-com:office:spreadsheet">',
-      `<Worksheet ss:Name="Results"><Table>${rows.join("")}</Table></Worksheet>`,
-      "</Workbook>",
-    ].join("");
+    const pageHeight = 792;
+    const margin = 40;
+    const lineHeight = 12;
+    const linesPerPage = Math.floor((pageHeight - margin * 2) / lineHeight);
+    const pages: string[][] = [];
+    for (let i = 0; i < lines.length; i += linesPerPage) {
+      pages.push(lines.slice(i, i + linesPerPage));
+    }
 
-    const blob = new Blob([workbook], {
-      type: "application/vnd.ms-excel",
+    const buildContentStream = (pageLines: string[]) => {
+      const startY = pageHeight - margin;
+      let stream = `BT\n/F1 10 Tf\n${margin} ${startY} Td\n`;
+      pageLines.forEach((line, index) => {
+        const safeLine = escapePdfText(line);
+        if (index > 0) {
+          stream += `0 -${lineHeight} Td\n`;
+        }
+        stream += `(${safeLine}) Tj\n`;
+      });
+      stream += "ET\n";
+      return stream;
+    };
+
+    const objects: string[] = [];
+    const addObject = (body: string) => {
+      objects.push(body);
+      return objects.length;
+    };
+
+    addObject("<< /Type /Catalog /Pages 2 0 R >>");
+    const pagesObjectIndex = addObject("");
+    const fontObjectNumber = addObject(
+      "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>"
+    );
+
+    const pageObjectNumbers: number[] = [];
+    pages.forEach((pageLines) => {
+      const content = buildContentStream(pageLines);
+      const contentObjectNumber = addObject(
+        `<< /Length ${content.length} >>\nstream\n${content}endstream`
+      );
+      const pageObjectNumber = addObject(
+        `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 ${fontObjectNumber} 0 R >> >> /Contents ${contentObjectNumber} 0 R >>`
+      );
+      pageObjectNumbers.push(pageObjectNumber);
     });
+
+    objects[pagesObjectIndex - 1] = `<< /Type /Pages /Kids [${pageObjectNumbers
+      .map((num) => `${num} 0 R`)
+      .join(" ")}] /Count ${pageObjectNumbers.length} >>`;
+
+    let pdf = "%PDF-1.4\n";
+    const offsets: number[] = [0];
+    objects.forEach((object) => {
+      offsets.push(pdf.length);
+      pdf += `${offsets.length - 1} 0 obj\n${object}\nendobj\n`;
+    });
+    const xrefOffset = pdf.length;
+    pdf += `xref\n0 ${objects.length + 1}\n`;
+    pdf += "0000000000 65535 f \n";
+    for (let i = 1; i <= objects.length; i += 1) {
+      pdf += `${offsets[i].toString().padStart(10, "0")} 00000 n \n`;
+    }
+    pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+
+    const blob = new Blob([pdf], { type: "application/pdf" });
     const url = URL.createObjectURL(blob);
     const stamp = exportedAt.replace(/[:.]/g, "-");
     const link = document.createElement("a");
     link.href = url;
-    link.download = `label-verifications-${stamp}.xls`;
+    link.download = `label-verifications-${stamp}.pdf`;
     link.click();
     URL.revokeObjectURL(url);
   };
@@ -120,54 +182,17 @@ export default function ReviewPage() {
     <div className="max-w-7xl mx-auto">
       <h1 className="text-4xl font-bold mb-6 text-center">Review Results</h1>
 
-      {/* Summary */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-        <h2 className="text-xl font-semibold mb-4">Summary</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="bg-green-50 dark:bg-green-900 p-4 rounded-lg">
-            <div className="text-3xl font-bold text-green-600 dark:text-green-300">
-              {passCount}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">✅ Passed</div>
-          </div>
-          <div className="bg-yellow-50 dark:bg-yellow-900 p-4 rounded-lg">
-            <div className="text-3xl font-bold text-yellow-600 dark:text-yellow-300">
-              {warningCount}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">⚠️ Warnings</div>
-          </div>
-          <div className="bg-red-50 dark:bg-red-900 p-4 rounded-lg">
-            <div className="text-3xl font-bold text-red-600 dark:text-red-300">
-              {failCount}
-            </div>
-            <div className="text-sm text-gray-600 dark:text-gray-400">❌ Failed</div>
-          </div>
-        </div>
-      </div>
+      <SummaryPanel
+        passCount={passCount}
+        warningCount={warningCount}
+        failCount={failCount}
+      />
 
-      {/* Image Selector */}
-      {verifications.length > 1 && (
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4">Select Image</h2>
-          <div className="flex flex-wrap gap-2">
-            {verifications.map((verification, index) => (
-              <button
-                key={verification.imageId}
-                onClick={() => setSelectedIndex(index)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 ${
-                  selectedIndex === index
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-gray-200 hover:bg-gray-300 dark:hover:bg-gray-600"
-                }`}
-                aria-label={`View results for ${verification.imageName}`}
-                aria-pressed={selectedIndex === index}
-              >
-                {verification.overallStatus} {verification.imageName}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      <ImageSelector
+        verifications={verifications}
+        selectedIndex={selectedIndex}
+        onSelect={setSelectedIndex}
+      />
 
       {/* Side-by-Side Comparison */}
       <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 mb-6">
@@ -178,237 +203,19 @@ export default function ReviewPage() {
           <div className="text-2xl">{currentVerification.overallStatus}</div>
         </div>
 
-        {currentVerification.evaluation && (
-          <div className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">AI Evaluation</h3>
-              <span className="text-sm font-semibold">
-                {currentVerification.evaluation.passed ? "✅ Passed" : "❌ Failed"}
-              </span>
-            </div>
-          </div>
-        )}
-
-        {currentVerification.results.some(
-          (result) => result.field === "Rule: Additive Disclosure"
-        ) && (
-          <div className="mb-4 rounded-lg border border-gray-200 dark:border-gray-700 p-4">
-            <h3 className="font-semibold">Additive Disclosure Checks</h3>
-            <p className="mt-2 text-sm text-gray-600 dark:text-gray-300">
-              Review any required additive disclosures (including sulfites).
-            </p>
-            <ul className="mt-3 text-sm text-gray-700 dark:text-gray-300 space-y-1">
-              {currentVerification.results
-                .filter((result) => result.field === "Rule: Additive Disclosure")
-                .map((result, index) => (
-                  <li key={`${result.field}-${index}`}>
-                    {result.status} {result.message}
-                  </li>
-                ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="overflow-x-auto">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-gray-100 dark:bg-gray-700">
-                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">
-                  Field
-                </th>
-                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">
-                  Expected
-                </th>
-                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">
-                  Extracted
-                </th>
-                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center">
-                  Status
-                </th>
-                <th className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-left">
-                  Message
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {currentVerification.results.map((result, index) => (
-                <tr
-                  key={index}
-                  className={`${
-                    result.status === "✅"
-                      ? "bg-green-50 dark:bg-green-900/20"
-                      : result.status === "⚠️"
-                      ? "bg-yellow-50 dark:bg-yellow-900/20"
-                      : "bg-red-50 dark:bg-red-900/20"
-                  }`}
-                >
-                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 font-semibold">
-                    {result.field}
-                  </td>
-                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
-                    <div className="max-w-xs overflow-hidden text-ellipsis">
-                      {result.expected.length > 100
-                        ? result.expected.substring(0, 100) + "..."
-                        : result.expected}
-                    </div>
-                  </td>
-                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2">
-                    <div className="max-w-xs overflow-hidden text-ellipsis">
-                      {result.extracted.length > 100
-                        ? result.extracted.substring(0, 100) + "..."
-                        : result.extracted}
-                    </div>
-                  </td>
-                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-center text-2xl">
-                    {result.status}
-                  </td>
-                  <td className="border border-gray-300 dark:border-gray-600 px-4 py-2 text-sm">
-                    {result.message}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <AIEvaluationPanel evaluation={currentVerification.evaluation} />
+        <AdditiveDisclosurePanel results={currentVerification.results} />
+        <ResultsTable results={currentVerification.results} />
       </div>
 
       {/* Detailed View */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">Expected Data</h2>
-          <dl className="space-y-3">
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Brand
-              </dt>
-              <dd className="mt-1">{currentVerification.expectedData.brandName.text}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Class/Type
-              </dt>
-              <dd className="mt-1">{currentVerification.expectedData.classType.text}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Alcohol Content
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.expectedData.alcoholContent?.text ?? "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Net Contents
-              </dt>
-              <dd className="mt-1">{currentVerification.expectedData.netContents.text}</dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Bottler/Producer
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.expectedData.bottlerProducer?.text ?? "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Country of Origin
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.expectedData.countryOfOrigin?.text ?? "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Government Warning
-              </dt>
-              <dd className="mt-1 text-xs break-words">
-                {currentVerification.expectedData.governmentWarning?.text ?? "Not provided"}
-              </dd>
-            </div>
-          </dl>
-        </div>
-
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6">
-          <h2 className="text-xl font-semibold mb-4">Extracted Data</h2>
-          <dl className="space-y-3">
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Brand
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.brandName?.text ?? "Not found"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Class/Type
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.classType?.text ?? "Not found"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Alcohol Content
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.alcoholContent?.text ?? "Not found"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Net Contents
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.netContents?.text ?? "Not found"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Bottler/Producer
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.bottlerProducer?.text ?? "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Country of Origin
-              </dt>
-              <dd className="mt-1">
-                {currentVerification.extractedData.countryOfOrigin?.text ?? "Not provided"}
-              </dd>
-            </div>
-            <div>
-              <dt className="font-semibold text-sm text-gray-600 dark:text-gray-400">
-                Government Warning
-              </dt>
-              <dd className="mt-1 text-xs break-words">
-                {currentVerification.extractedData.governmentWarning?.text ?? "Not found"}
-              </dd>
-            </div>
-          </dl>
-        </div>
+        <ExpectedDataPanel data={currentVerification.expectedData} />
+        <ExtractedDataPanel data={currentVerification.extractedData} />
       </div>
 
       {/* Actions */}
-      <div className="flex gap-4 justify-center">
-        <button
-          type="button"
-          onClick={handleExport}
-          className="bg-gray-900 text-white px-6 py-3 rounded-lg font-semibold hover:bg-gray-800 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-900 focus:ring-offset-2"
-        >
-          Export Results
-        </button>
-        <Link
-          href="/upload"
-          className="bg-blue-600 text-white px-6 py-3 rounded-lg font-semibold hover:bg-blue-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
-        >
-          Upload More
-        </Link>
-      </div>
+      <ReviewActions onExport={handleExport} />
     </div>
   );
 }

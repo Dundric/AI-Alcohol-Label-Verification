@@ -271,10 +271,3 @@ export function countMissingFields(extracted: ExtractedAlcoholLabel): number {
     return value === null || value === undefined ? count + 1 : count;
   }, 0);
 }
-
-/**
- * Counts how many field scores are 0 in an evaluation.
- */
-function countFieldFailures(fields: FieldAccuracy): number {
-  return Object.values(fields).filter((value) => value === 0).length;
-}

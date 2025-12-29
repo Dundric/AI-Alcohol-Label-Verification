@@ -11,6 +11,9 @@ function getVerifyImageUrl(): string | null {
   return process.env.AZURE_FUNCTION_VERIFY_IMAGE_URL ?? null;
 }
 
+// Handles label extraction requests. Accepts either JSON with a data URL or
+// multipart form data, runs the extraction pipeline locally when configured,
+// or forwards the payload to the external verify service when enabled.
 export async function POST(request: Request) {
   const verifyImageUrl = getVerifyImageUrl();
 
