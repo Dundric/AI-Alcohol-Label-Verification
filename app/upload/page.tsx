@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { batchExtractLabelData, extractLabelData } from "@/lib/ocr";
 import type { ExpectedAlcoholLabel, LabelVerification } from "@/lib/schemas";
@@ -67,6 +67,20 @@ export default function UploadPage() {
   const [mode, setMode] = useState<UploadMode>("single");
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [queueNotice, setQueueNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!isProcessing) {
+      setQueueNotice(null);
+      return;
+    }
+    const timer = setTimeout(() => {
+      setQueueNotice(
+        "High demand detected. Requests are queued and may take longer."
+      );
+    }, 5000);
+    return () => clearTimeout(timer);
+  }, [isProcessing]);
 
   const { files, fileError, handleFileChange, handleFolderChange } =
     useImageSelection();
@@ -238,6 +252,11 @@ export default function UploadPage() {
         </button>
 
         {isProcessing && <ProgressBar progress={progress} />}
+        {isProcessing && queueNotice && (
+          <p className="mt-2 text-sm text-gray-600 dark:text-gray-400">
+            {queueNotice}
+          </p>
+        )}
       </div>
     </div>
   );

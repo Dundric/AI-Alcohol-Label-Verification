@@ -57,25 +57,50 @@ function getErrorMessage(error: unknown, fallback: string): string {
   return anyError?.error?.message ?? fallback;
 }
 
+const RATE_LIMIT_RETRIES = 4;
+const RATE_LIMIT_INITIAL_DELAY_MS = 2000;
+const RATE_LIMIT_MAX_DELAY_MS = 15000;
+
+const sleep = (ms: number) =>
+  new Promise<void>((resolve) => setTimeout(resolve, ms));
+
 async function callWithModelFallback<T>(
   deployments: string[],
   log: LoggerFns["log"],
   label: string,
   runner: (deployment: string) => Promise<T>
 ): Promise<T> {
-  for (const deployment of deployments) {
-    try {
-      if (deployment !== deployments[0]) {
-        log(`[extract-label] ${label} trying fallback model ${deployment}`);
+  let attempt = 0;
+  let delayMs = RATE_LIMIT_INITIAL_DELAY_MS;
+
+  while (attempt <= RATE_LIMIT_RETRIES) {
+    let sawRateLimit = false;
+    for (const deployment of deployments) {
+      try {
+        if (deployment !== deployments[0]) {
+          log(`[extract-label] ${label} trying fallback model ${deployment}`);
+        }
+        return await runner(deployment);
+      } catch (error) {
+        if (isRateLimitError(error)) {
+          sawRateLimit = true;
+          log(`[extract-label] ${label} rate limited on ${deployment}`);
+          continue;
+        }
+        throw error;
       }
-      return await runner(deployment);
-    } catch (error) {
-      if (isRateLimitError(error)) {
-        log(`[extract-label] ${label} rate limited on ${deployment}`);
-        continue;
-      }
-      throw error;
     }
+
+    if (!sawRateLimit || attempt === RATE_LIMIT_RETRIES) {
+      break;
+    }
+
+    log(
+      `[extract-label] ${label} rate limited on all models, waiting ${delayMs}ms before retry`
+    );
+    await sleep(delayMs);
+    attempt += 1;
+    delayMs = Math.min(delayMs * 2, RATE_LIMIT_MAX_DELAY_MS);
   }
 
   const waitError = new Error(
