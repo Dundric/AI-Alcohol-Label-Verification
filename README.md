@@ -95,6 +95,7 @@ Create a `.env` file in the root directory with the following required variables
 # Azure OpenAI Configuration (REQUIRED)
 AZURE_OPENAI_ENDPOINT=https://your-resource-name.openai.azure.com
 AZURE_OPENAI_API_KEY=your-api-key-here
+AZURE_OPENAI_DEPLOYMENT=your-deployment-name-1
 AZURE_OPENAI_DEPLOYMENTS=your-deployment-name-1,your-deployment-name-2
 
 My AZURE_OPENAI_DEPLOYMENTS=gpt-4.1-mini,gpt-4.1,gpt-5-mini
