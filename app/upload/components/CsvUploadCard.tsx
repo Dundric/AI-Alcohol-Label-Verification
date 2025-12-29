@@ -42,9 +42,6 @@ export function CsvUploadCard({
         net_contents, bottler_producer.
       </p>
       
-      <p className="text-xs text-gray-500 dark:text-gray-400 mb-4">
-        When a CSV is loaded, the manual expected fields below are ignored.
-      </p>
 
       <input
         type="file"

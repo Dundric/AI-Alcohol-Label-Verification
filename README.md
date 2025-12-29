@@ -241,11 +241,6 @@ Your CSV must include these columns (see `/Table-Example.csv` for reference):
 - Ensure all required columns are present
 - Use boolean values: TRUE/FALSE (case-insensitive)
 
-### Slow Batch Processing
-
-- Azure OpenAI API has rate limits - adjust `CSV_PARALLEL_LIMIT` in `/lib/upload/constants.ts`
-- Default is 5 concurrent requests; reduce if hitting rate limits
-- Large batches will take time due to AI processing
 
 ## Deployment
 
@@ -280,52 +275,6 @@ Currently no automated tests are included. Manual testing is recommended for:
 - Various image formats and sizes
 - Edge cases in field matching
 
-### Adding New Validation Fields
-
-1. Update schemas in `/lib/schemas.ts`
-2. Modify extraction prompts in `/lib/extraction/prompts.ts`
-3. Add comparison logic in `/lib/compare.ts`
-4. Update UI forms in `/app/upload/components`
-
-## Security Considerations
-
-- Never commit `.env.local` to version control
-- Rotate API keys regularly
-- Use Azure RBAC for fine-grained access control
-- Implement rate limiting for production deployments
-- Sanitize user inputs (application uses Zod validation)
-- Consider adding authentication for production use
-
-## Performance Tips
-
-- Images are automatically compressed and optimized
-- Batch processing uses configurable parallelism to respect rate limits
-- Azure OpenAI responses are streamed when possible
-- Consider caching results for repeated verifications
-
-## Future Enhancements
-
-This is an actively developed application. Potential improvements:
-
-- [ ] Add database persistence for verification history
-- [ ] Implement user authentication and multi-tenancy
-- [ ] Export results to PDF reports
-- [ ] Add custom validation rule configuration
-- [ ] Support for additional languages
-- [ ] Training mode to improve extraction accuracy
-- [ ] Integration with TTB COLA APIs
-- [ ] Automated image quality checking
-- [ ] Support for video label extraction
-
-## Contributing
-
-Contributions are welcome! Please:
-
-1. Fork the repository
-2. Create a feature branch
-3. Make your changes with clear commit messages
-4. Test thoroughly
-5. Submit a pull request
 
 ## License
 
