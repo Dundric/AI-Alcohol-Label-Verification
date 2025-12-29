@@ -36,7 +36,8 @@ export function CsvUploadCard({
       </p>
 
       <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
-        Upload a CSV with expected label data and the image filename to match.
+        Upload a CSV or Excel file with expected label data and the image
+        filename to match.
         Required columns: image_name, brand_name, class_type, alcohol_content,
         net_contents, bottler_producer.
       </p>
@@ -47,7 +48,7 @@ export function CsvUploadCard({
 
       <input
         type="file"
-        accept=".csv,text/csv"
+        accept=".csv,.xls,.xlsx,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         onChange={onChange}
         className="block w-full text-sm text-gray-600 dark:text-gray-300"
         aria-label="Upload expected data CSV"

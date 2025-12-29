@@ -23,8 +23,41 @@ export function useCsvExpectedData(): {
 
     const file = event.target.files[0];
     try {
-      const text = await file.text();
-      const { map, error } = parseExpectedCsv(text);
+      const lowerName = file.name.toLowerCase();
+      const isCsv =
+        lowerName.endsWith(".csv") ||
+        file.type === "text/csv" ||
+        file.type === "application/vnd.ms-excel";
+      const isExcel =
+        lowerName.endsWith(".xlsx") ||
+        lowerName.endsWith(".xls") ||
+        file.type ===
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet";
+
+      let map: CsvExpectedMap | null = null;
+      let error: string | null = null;
+
+      if (isExcel) {
+        const XLSX = await import("xlsx");
+        const buffer = await file.arrayBuffer();
+        const workbook = XLSX.read(buffer, { type: "array" });
+        const sheetName = workbook.SheetNames[0];
+        if (!sheetName) {
+          setCsvExpectedMap(null);
+          setCsvError("Excel file must include at least one sheet.");
+          return;
+        }
+        const worksheet = workbook.Sheets[sheetName];
+        const csvText = XLSX.utils.sheet_to_csv(worksheet);
+        ({ map, error } = parseExpectedCsv(csvText));
+      } else if (isCsv) {
+        const text = await file.text();
+        ({ map, error } = parseExpectedCsv(text));
+      } else {
+        setCsvExpectedMap(null);
+        setCsvError("Unsupported file type. Upload a CSV or Excel file.");
+        return;
+      }
 
       if (error) {
         setCsvExpectedMap(null);
@@ -37,7 +70,7 @@ export function useCsvExpectedData(): {
     } catch (error) {
       console.error("Failed to parse CSV:", error);
       setCsvExpectedMap(null);
-      setCsvError("Failed to parse CSV file.");
+      setCsvError("Failed to parse CSV or Excel file.");
     }
   };
 
